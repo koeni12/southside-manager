@@ -57,7 +57,7 @@
             Calendar, Lock, User, Briefcase, UserPlus, UserMinus, Edit, Calculator, DollarSign, Key, 
             PieChart as PieIcon, Activity, Trophy, Filter, Unlock, Target, ExternalLink, 
             FileSignature, Building, Paperclip, FilePlus, Clock, XCircle, Gavel, CreditCard, HelpCircle, 
-            Terminal, MessageSquare, Copy, Tag, Send, Phone, MessageCircle, CalendarDays, Eye, Download, Wifi, WifiOff
+            Terminal, MessageSquare, Copy, Tag, Send, Phone, MessageCircle, CalendarDays, Eye, Download, Wifi, WifiOff, Palette
         } from 'lucide-react';
         import { 
             BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, Legend 
@@ -111,7 +111,33 @@
         }
 
         // --- Initial Data for Seeding & Offline Mode ---
-        const INITIAL_CONFIG = { repairCostPercent: 50, customCostPercent: 20, overheadCost: 0 };
+        const INITIAL_THEME = {
+            appName: "Southside Manager",
+            primaryColor: "indigo", // Default Tailwind color name
+            secondaryColor: "violet"
+        };
+
+        const THEME_COLORS = [
+            { name: 'indigo', label: 'Indigo (Défaut)', hex: '#6366f1' },
+            { name: 'blue', label: 'Bleu', hex: '#3b82f6' },
+            { name: 'emerald', label: 'Émeraude', hex: '#10b981' },
+            { name: 'red', label: 'Rouge', hex: '#ef4444' },
+            { name: 'amber', label: 'Ambre', hex: '#f59e0b' },
+            { name: 'violet', label: 'Violet', hex: '#8b5cf6' },
+            { name: 'pink', label: 'Rose', hex: '#ec4899' },
+            { name: 'cyan', label: 'Cyan', hex: '#06b6d4' },
+        ];
+
+        const INITIAL_CONFIG = { 
+            services: [
+                { id: 'srv_repair', name: 'Réparation', costPercent: 50 },
+                { id: 'srv_custom', name: 'Custom', costPercent: 20 },
+                { id: 'srv_clean', name: 'Nettoyage', costPercent: 0 },
+                { id: 'srv_tow', name: 'Dépannage', costPercent: 0 },
+                { id: 'srv_other', name: 'Autre', costPercent: 0 }
+            ]
+        };
+
         const INITIAL_GRADES = [
             { id: 'g1', name: 'Patron', primePercent: 20, maxSalary: 5000, quota: 25 },
             { id: 'g2', name: 'Co-patron', primePercent: 20, maxSalary: 4000, quota: 25 },
@@ -133,7 +159,6 @@
             open: "🔓 Le Southside Garage est ouvert ! Venez nous voir pour vos réparations et customs.",
             close: "🔒 Le Southside Garage ferme ses portes. À bientôt !"
         };
-        const SERVICE_TYPES = ['Réparation', 'Custom', 'Nettoyage', 'Dépannage', 'Autre'];
         
         const INITIAL_GARAGE_PRICES = [
             { category: 'Entretien', items: [{ name: 'Réparation Moteur', price: 250 }, { name: 'Réparation Carrosserie', price: 150 }, { name: 'Nettoyage Complet', price: 80 }, { name: 'Dépannage / Remorquage', price: 200 }] },
@@ -192,14 +217,15 @@
         };
 
         // --- PDF GENERATOR ---
-        const generateInvoicePDF = (invoice) => {
+        const generateInvoicePDF = (invoice, theme) => {
             const doc = new jsPDF();
+            // Utilisation d'une couleur par défaut si le thème n'est pas reconnu par jsPDF (on reste sur un bleu sûr)
             doc.setFillColor(79, 70, 229); 
             doc.rect(0, 0, 210, 30, 'F');
             doc.setTextColor(255, 255, 255);
             doc.setFontSize(22);
             doc.setFont('helvetica', 'bold');
-            doc.text("SOUTHSIDE GARAGE", 105, 20, { align: 'center' });
+            doc.text(theme?.appName?.toUpperCase() || "SOUTHSIDE GARAGE", 105, 20, { align: 'center' });
             
             doc.setTextColor(0, 0, 0);
             doc.setFontSize(14);
@@ -234,11 +260,11 @@
             doc.setTextColor(100, 100, 100);
             doc.text("Merci de votre confiance !", 105, 180, { align: 'center' });
             
-            doc.save(`facture_southside_${invoice.id}.pdf`);
+            doc.save(`facture_${invoice.id}.pdf`);
         };
 
         // --- PAY SLIP GENERATOR ---
-        const generatePaySlipPDF = (employee, salaryData, periodStart) => {
+        const generatePaySlipPDF = (employee, salaryData, periodStart, theme) => {
             const doc = new jsPDF();
             const start = getStartOfWeek(periodStart);
             const end = getEndOfWeek(periodStart);
@@ -257,7 +283,7 @@
             doc.text("FICHE DE PAIE", 105, 20, { align: 'center' });
             doc.setFontSize(12);
             doc.setFont('helvetica', 'normal');
-            doc.text("SOUTHSIDE GARAGE", 105, 30, { align: 'center' });
+            doc.text(theme?.appName?.toUpperCase() || "SOUTHSIDE GARAGE", 105, 30, { align: 'center' });
 
             // Info Employé
             doc.setTextColor(255, 255, 255);
@@ -338,10 +364,16 @@
             </div>
         );
 
-        const Button = ({ children, onClick, variant = 'primary', className = "", disabled = false, type="button" }) => {
+        const Button = ({ children, onClick, variant = 'primary', className = "", disabled = false, type="button", color }) => {
             const baseStyle = "px-5 py-2.5 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95";
+            
+            // Dynamic generation of primary style based on theme color if not overridden
+            const dynamicPrimary = color 
+                ? `bg-gradient-to-r from-${color}-600 to-${color}-500 hover:from-${color}-500 hover:to-${color}-400 text-white shadow-lg shadow-${color}-500/30 border border-${color}-500/20`
+                : "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-indigo-500/30 border border-indigo-500/20";
+
             const variants = {
-                primary: "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-indigo-500/30 border border-indigo-500/20",
+                primary: dynamicPrimary,
                 danger: "bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-lg shadow-red-500/20",
                 secondary: "bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700",
                 ghost: "bg-transparent hover:bg-white/5 text-gray-400 hover:text-white",
@@ -352,19 +384,19 @@
 
         const Input = ({ label, type = "text", value, onChange, placeholder, required = false, prefix, readOnly = false, list }) => (
             <div className="flex flex-col gap-2 w-full">
-                {label && <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider ml-1">{label} {required && "*"}</label>}
+                {label && <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">{label} {required && "*"}</label>}
                 <div className="relative group">
-                {prefix && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-indigo-400 transition-colors">{prefix}</span>}
-                <input type={type} value={value} onChange={onChange} readOnly={readOnly} placeholder={placeholder} list={list} className={`w-full bg-black/40 border border-gray-700 rounded-xl py-3 px-4 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all ${prefix ? 'pl-9' : ''} ${readOnly ? 'cursor-not-allowed opacity-60' : ''}`}/>
+                {prefix && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-white transition-colors">{prefix}</span>}
+                <input type={type} value={value} onChange={onChange} readOnly={readOnly} placeholder={placeholder} list={list} className={`w-full bg-black/40 border border-gray-700 rounded-xl py-3 px-4 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-white focus:ring-2 focus:ring-white/10 transition-all ${prefix ? 'pl-9' : ''} ${readOnly ? 'cursor-not-allowed opacity-60' : ''}`}/>
                 </div>
             </div>
         );
 
         const Select = ({ label, value, onChange, options, required = false, readOnly = false }) => (
             <div className="flex flex-col gap-2 w-full">
-                {label && <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider ml-1">{label} {required && "*"}</label>}
+                {label && <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">{label} {required && "*"}</label>}
                 <div className="relative">
-                <select value={value} onChange={onChange} disabled={readOnly} className={`w-full bg-black/40 border border-gray-700 rounded-xl py-3 px-4 text-gray-100 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 appearance-none transition-all ${readOnly ? 'cursor-not-allowed opacity-60' : ''}`}>
+                <select value={value} onChange={onChange} disabled={readOnly} className={`w-full bg-black/40 border border-gray-700 rounded-xl py-3 px-4 text-gray-100 focus:outline-none focus:border-white focus:ring-2 focus:ring-white/10 appearance-none transition-all ${readOnly ? 'cursor-not-allowed opacity-60' : ''}`}>
                     <option value="">Sélectionner...</option>
                     {options.map((opt, idx) => (<option key={idx} value={opt.value || opt}>{opt.label || opt}</option>))}
                 </select>
@@ -385,21 +417,21 @@
             return <span className={`px-3 py-1 rounded-lg text-xs font-bold tracking-wide border ${styles[color] || styles.blue}`}>{children}</span>;
         };
         
-        const NavItem = ({ tabId, icon: Icon, label, activeTab, onClick }) => (
-            <button onClick={() => onClick(tabId)} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-300 group ${activeTab === tabId ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-indigo-500/25' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
+        const NavItem = ({ tabId, icon: Icon, label, activeTab, onClick, themeColor = 'indigo' }) => (
+            <button onClick={() => onClick(tabId)} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-300 group ${activeTab === tabId ? `bg-gradient-to-r from-${themeColor}-600 to-${themeColor}-500 text-white shadow-lg shadow-${themeColor}-500/25` : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
                 <Icon size={20} className={`transition-transform duration-300 ${activeTab === tabId ? 'scale-110' : 'group-hover:scale-110'}`} />
                 <span className="font-medium tracking-wide">{label}</span>
                 {activeTab === tabId && <ChevronRight size={16} className="ml-auto opacity-70" />}
             </button>
         );
 
-        const WeekNavigator = ({ selectedDate, onPrev, onNext }) => {
+        const WeekNavigator = ({ selectedDate, onPrev, onNext, themeColor='indigo' }) => {
             const start = getStartOfWeek(selectedDate);
             const end = getEndOfWeek(selectedDate);
             return (
                 <div className="flex items-center gap-4 bg-gray-800/50 p-2 rounded-xl border border-gray-700/50 mb-6 w-fit">
                     <button onClick={onPrev} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors"><ChevronLeft size={20} /></button>
-                    <div className="flex items-center gap-2 px-2"><Calendar size={18} className="text-indigo-400" /><span className="text-sm font-bold text-white font-mono uppercase tracking-wide">{formatDateRange(start, end)}</span></div>
+                    <div className="flex items-center gap-2 px-2"><Calendar size={18} className={`text-${themeColor}-400`} /><span className="text-sm font-bold text-white font-mono uppercase tracking-wide">{formatDateRange(start, end)}</span></div>
                     <button onClick={onNext} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors"><ChevronRight size={20} /></button>
                 </div>
             );
@@ -419,6 +451,7 @@
 
             // Data State (Managed by Firestore Subscriptions or Local State)
             const [config, setConfig] = useState(INITIAL_CONFIG);
+            const [theme, setTheme] = useState(INITIAL_THEME); // THEME STATE
             const [employees, setEmployees] = useState([]);
             const [contracts, setContracts] = useState([]);
             const [grades, setGrades] = useState(INITIAL_GRADES);
@@ -501,6 +534,7 @@
                     setGrades(loadLocal('grades', INITIAL_GRADES));
                     setPrices(loadLocal('prices', INITIAL_GARAGE_PRICES));
                     setConfig(loadLocal('config', INITIAL_CONFIG));
+                    setTheme(loadLocal('theme', INITIAL_THEME));
                     setCustomMessages(loadLocal('customMessages', INITIAL_MESSAGES));
                     return;
                 }
@@ -522,10 +556,8 @@
                 }, handleSnapshotError);
                 
                 const unsubEmployees = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), (snap) => {
-                    // FIX: Capture both internal 'id' and Firestore 'docId' (d.id) to ensure updates/deletes work
                     const empList = snap.docs.map(d => ({ ...d.data(), docId: d.id }));
                     setEmployees(empList);
-                    // SEEDING LOGIC: If no employees, add defaults
                     if (snap.empty) {
                         INITIAL_EMPLOYEES.forEach(emp => addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), emp));
                     }
@@ -551,8 +583,26 @@
                 }, handleSnapshotError);
 
                 const unsubConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), (docSnap) => {
-                    if (docSnap.exists()) setConfig(docSnap.data());
-                    else setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), INITIAL_CONFIG);
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        if (!data.services) {
+                            data.services = [
+                                { id: 'srv_repair', name: 'Réparation', costPercent: data.repairCostPercent || 50 },
+                                { id: 'srv_custom', name: 'Custom', costPercent: data.customCostPercent || 20 },
+                                { id: 'srv_clean', name: 'Nettoyage', costPercent: 0 },
+                                { id: 'srv_tow', name: 'Dépannage', costPercent: 0 },
+                                { id: 'srv_other', name: 'Autre', costPercent: 0 }
+                            ];
+                        }
+                        setConfig(data);
+                    } else {
+                        setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), INITIAL_CONFIG);
+                    }
+                }, handleSnapshotError);
+
+                const unsubTheme = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'theme'), (docSnap) => {
+                    if (docSnap.exists()) setTheme(docSnap.data());
+                    else setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'theme'), INITIAL_THEME);
                 }, handleSnapshotError);
 
                 const unsubMessages = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'messages'), (docSnap) => {
@@ -562,12 +612,11 @@
 
                 return () => {
                     unsubInvoices(); unsubEmployees(); unsubContracts(); unsubApps();
-                    unsubGrades(); unsubPrices(); unsubConfig(); unsubMessages();
+                    unsubGrades(); unsubPrices(); unsubConfig(); unsubTheme(); unsubMessages();
                 };
             }, [authUser, isOffline]);
 
             // --- LOCAL STORAGE EFFECTS FOR OFFLINE PERSISTENCE ---
-            // These effects only run if isOffline is true to save state changes
             useEffect(() => { if (isOffline) localStorage.setItem('southside_invoices', JSON.stringify(invoices)); }, [invoices, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_employees', JSON.stringify(employees)); }, [employees, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_contracts', JSON.stringify(contracts)); }, [contracts, isOffline]);
@@ -575,6 +624,7 @@
             useEffect(() => { if (isOffline) localStorage.setItem('southside_grades', JSON.stringify(grades)); }, [grades, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_prices', JSON.stringify(prices)); }, [prices, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_config', JSON.stringify(config)); }, [config, isOffline]);
+            useEffect(() => { if (isOffline) localStorage.setItem('southside_theme', JSON.stringify(theme)); }, [theme, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_customMessages', JSON.stringify(customMessages)); }, [customMessages, isOffline]);
 
 
@@ -740,13 +790,13 @@
 
             const calculateInvoiceMetrics = (type, price) => {
                 const p = parseFloat(price) || 0;
-                let costPercent = 0;
-                if (type === 'Réparation') costPercent = config.repairCostPercent; 
-                else if (type === 'Custom') costPercent = config.customCostPercent; 
-                else costPercent = config.customCostPercent; 
+                // Recherche dynamique du coût selon le service configuré
+                const service = (config.services || []).find(s => s.name === type);
+                const costPercent = service ? service.costPercent : 0;
+                
                 const totalCost = p * (costPercent / 100);
                 const netProfit = p - totalCost;
-                return { totalCost, netProfit };
+                return { totalCost, netProfit, costPercent };
             };
 
             const handleCreateInvoice = async () => {
@@ -841,6 +891,27 @@
                     setGrades(newGrades);
                 } else {
                     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'grades'), { list: newGrades });
+                }
+            };
+
+            const handleAddGrade = async () => {
+                const newGrade = { id: `g_${Date.now()}`, name: 'Nouveau Grade', primePercent: 0, maxSalary: 0, quota: 0 };
+                const newGrades = [...grades, newGrade];
+                if (isOffline) {
+                    setGrades(newGrades);
+                } else {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'grades'), { list: newGrades });
+                }
+            };
+
+            const handleDeleteGrade = async (gradeId) => {
+                if(window.confirm("Supprimer ce grade ?")) {
+                    const newGrades = grades.filter(g => g.id !== gradeId);
+                    if (isOffline) {
+                        setGrades(newGrades);
+                    } else {
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'grades'), { list: newGrades });
+                    }
                 }
             };
 
@@ -971,6 +1042,14 @@
                     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), newConf);
                 }
             }
+
+            const saveTheme = async (newTheme) => {
+                setTheme(newTheme); // Optimistic
+                if (!isOffline) {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'theme'), newTheme);
+                }
+                showNotification("Thème mis à jour !");
+            };
             
             // --- RESET LOGIC ---
             const handleResetStats = async () => {
@@ -1017,15 +1096,15 @@
 
             const renderAuthScreen = (
                 <div className="min-h-screen bg-[#050505] text-gray-200 font-sans flex items-center justify-center p-4">
-                    <div className="absolute top-0 left-0 w-full h-96 bg-indigo-900/20 blur-[120px] pointer-events-none"></div>
-                    <div className="absolute bottom-0 right-0 w-96 h-96 bg-violet-900/10 blur-[100px] pointer-events-none"></div>
+                    <div className={`absolute top-0 left-0 w-full h-96 bg-${theme.primaryColor}-900/20 blur-[120px] pointer-events-none`}></div>
+                    <div className={`absolute bottom-0 right-0 w-96 h-96 bg-${theme.secondaryColor || 'violet'}-900/10 blur-[100px] pointer-events-none`}></div>
 
                     <GlassCard className="w-full max-w-md p-8 relative overflow-hidden animate-fadeIn">
                         <div className="text-center mb-8">
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 mx-auto mb-4">
+                            <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br from-${theme.secondaryColor || 'violet'}-500 to-${theme.primaryColor}-600 flex items-center justify-center text-white shadow-lg shadow-${theme.primaryColor}-500/30 mx-auto mb-4`}>
                                 <Wallet size={32} />
                             </div>
-                            <h1 className="text-2xl font-black text-white tracking-tight">Southside <span className="text-indigo-500">Manager</span></h1>
+                            <h1 className="text-2xl font-black text-white tracking-tight">{theme.appName.split(' ')[0]} <span className={`text-${theme.primaryColor}-500`}>{theme.appName.split(' ').slice(1).join(' ')}</span></h1>
                             <p className="text-sm text-gray-500 mt-2">Enterprise Resource Planning</p>
                         </div>
 
@@ -1034,25 +1113,25 @@
                                 <form onSubmit={handleLogin} className="space-y-6">
                                     <div className="space-y-4">
                                         <div>
-                                            <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider ml-1 mb-2 block">Identifiant</label>
+                                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1 mb-2 block">Identifiant</label>
                                             <div className="relative group">
                                                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
-                                                <input type="text" placeholder="Nom et Prénom (ex: Edy Thomas)" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} className="w-full bg-black/40 border border-gray-700 rounded-xl py-3 pl-12 pr-4 text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all" />
+                                                <input type="text" placeholder="Nom et Prénom (ex: Edy Thomas)" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} className={`w-full bg-black/40 border border-gray-700 rounded-xl py-3 pl-12 pr-4 text-white focus:border-${theme.primaryColor}-500 focus:ring-2 focus:ring-${theme.primaryColor}-500/20 outline-none transition-all`} />
                                             </div>
                                         </div>
                                         <div>
-                                            <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider ml-1 mb-2 block">Mot de passe</label>
+                                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1 mb-2 block">Mot de passe</label>
                                             <div className="relative group">
                                                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
-                                                <input type="password" placeholder="Code d'accès" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} className="w-full bg-black/40 border border-gray-700 rounded-xl py-3 pl-12 pr-4 text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all" />
+                                                <input type="password" placeholder="Code d'accès" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} className={`w-full bg-black/40 border border-gray-700 rounded-xl py-3 pl-12 pr-4 text-white focus:border-${theme.primaryColor}-500 focus:ring-2 focus:ring-${theme.primaryColor}-500/20 outline-none transition-all`} />
                                             </div>
                                         </div>
                                     </div>
                                     {loginError && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-red-400 text-sm"><AlertCircle size={16} />{loginError}</div>}
-                                    <Button type="submit" className="w-full py-4 text-lg">Se connecter</Button>
+                                    <Button type="submit" className="w-full py-4 text-lg" color={theme.primaryColor}>Se connecter</Button>
                                 </form>
                                 <div className="mt-6 text-center border-t border-gray-800 pt-4">
-                                    <button onClick={() => setAuthMode('apply')} className="text-indigo-400 hover:text-white text-sm font-bold transition-colors">
+                                    <button onClick={() => setAuthMode('apply')} className={`text-${theme.primaryColor}-400 hover:text-white text-sm font-bold transition-colors`}>
                                         Candidature Spontanée (Postuler)
                                     </button>
                                 </div>
@@ -1076,9 +1155,9 @@
                                     </div>
                                     <Input label="Disponibilités" placeholder="Ex: Soirs semaine, Week-end..." value={applicationForm.availability} onChange={(e) => setApplicationForm({...applicationForm, availability: e.target.value})} />
                                     <div>
-                                        <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider ml-1 mb-2 block">Motivation</label>
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1 mb-2 block">Motivation</label>
                                         <textarea 
-                                            className="w-full bg-black/40 border border-gray-700 rounded-xl py-3 px-4 text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all h-24"
+                                            className={`w-full bg-black/40 border border-gray-700 rounded-xl py-3 px-4 text-white focus:border-${theme.primaryColor}-500 focus:ring-2 focus:ring-${theme.primaryColor}-500/20 outline-none transition-all h-24`}
                                             placeholder="Pourquoi voulez-vous nous rejoindre ?"
                                             value={applicationForm.motivation}
                                             onChange={(e) => setApplicationForm({...applicationForm, motivation: e.target.value})}
@@ -1115,12 +1194,12 @@
 
                 return (
                     <div className="animate-fadeIn space-y-8">
-                        <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} />
+                        <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} themeColor={theme.primaryColor} />
                         <div className="flex justify-between items-end">
                             <div>
                                 <h2 className="text-3xl font-black text-white tracking-tight flex items-center gap-3">
                                     {isViewingSelf ? `Bonjour, ${targetUser.name.split(' ')[0]} 👋` : `Fiche de ${targetUser.name}`}
-                                    {!isViewingSelf && <span className="text-sm bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded border border-indigo-500/30">Mode Supervision</span>}
+                                    {!isViewingSelf && <span className={`text-sm bg-${theme.primaryColor}-500/20 text-${theme.primaryColor}-400 px-2 py-1 rounded border border-${theme.primaryColor}-500/30`}>Mode Supervision</span>}
                                 </h2>
                                 <p className="text-gray-400">Performances pour la semaine sélectionnée.</p>
                             </div>
@@ -1155,7 +1234,7 @@
                             <GlassCard className="p-6">
                                 <div className="flex justify-between items-start mb-2">
                                     <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Chiffre d'Affaires</h3>
-                                    <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg">
+                                    <div className={`p-2 bg-${theme.primaryColor}-500/20 text-${theme.primaryColor}-400 rounded-lg`}>
                                         <Activity size={24} />
                                     </div>
                                 </div>
@@ -1235,15 +1314,15 @@
 
             const renderDashboard = () => (
                  <div className="animate-fadeIn space-y-8">
-                    <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} />
+                    <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} themeColor={theme.primaryColor} />
                     <div>
                         <h2 className="text-3xl font-black text-white tracking-tight">Dashboard</h2>
                         <p className="text-gray-400">Vue d'ensemble de la semaine sélectionnée.</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <GlassCard className="p-6 border-t-4 border-t-indigo-500 relative overflow-hidden">
+                        <GlassCard className={`p-6 border-t-4 border-t-${theme.primaryColor}-500 relative overflow-hidden`}>
                             <div className="absolute top-0 right-0 p-4 opacity-5"><Activity size={80}/></div>
-                            <h3 className="text-indigo-300 font-bold text-sm uppercase mb-2">Chiffre d'Affaires</h3>
+                            <h3 className={`text-${theme.primaryColor}-300 font-bold text-sm uppercase mb-2`}>Chiffre d'Affaires</h3>
                             <p className="text-4xl font-black text-white">${weeklyStats.totalRevenue.toLocaleString()}</p>
                         </GlassCard>
                         <GlassCard className="p-6 border-t-4 border-t-emerald-500 relative overflow-hidden">
@@ -1251,16 +1330,16 @@
                             <h3 className="text-emerald-300 font-bold text-sm uppercase mb-2">Bénéfice Net</h3>
                             <p className="text-4xl font-black text-white">${weeklyStats.totalProfit.toLocaleString()}</p>
                         </GlassCard>
-                        <GlassCard className="p-6 border-t-4 border-t-violet-500 relative overflow-hidden">
+                        <GlassCard className={`p-6 border-t-4 border-t-${theme.secondaryColor || 'violet'}-500 relative overflow-hidden`}>
                              <div className="absolute top-0 right-0 p-4 opacity-5"><Award size={80}/></div>
-                            <h3 className="text-violet-300 font-bold text-sm uppercase mb-2">Total Primes</h3>
+                            <h3 className={`text-${theme.secondaryColor || 'violet'}-300 font-bold text-sm uppercase mb-2`}>Total Primes</h3>
                             <p className="text-4xl font-black text-white">${weeklyStats.totalBonuses.toLocaleString()}</p>
                         </GlassCard>
                     </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                         <GlassCard className="p-6">
                             <h3 className="text-white font-bold mb-6 flex items-center gap-2">
-                                <TrendingUp size={18} className="text-indigo-400"/> Revenus Hebdomadaires
+                                <TrendingUp size={18} className={`text-${theme.primaryColor}-400`}/> Revenus Hebdomadaires
                             </h3>
                             <div className="h-64">
                                 <ResponsiveContainer width="100%" height="100%">
@@ -1309,23 +1388,23 @@
                   <div className="flex flex-col md:flex-row justify-between items-end mb-8">
                     <div>
                       <h2 className="text-3xl font-black text-white mb-2 tracking-tight">Nouvelle Facture</h2>
-                      <p className="text-gray-400">Saisie simplifiée. Connecté en tant que <strong className="text-indigo-400">{currentUser.name}</strong>.</p>
+                      <p className="text-gray-400">Saisie simplifiée. Connecté en tant que <strong className={`text-${theme.primaryColor}-400`}>{currentUser.name}</strong>.</p>
                     </div>
                   </div>
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-2">
                         <GlassCard className="p-8 relative overflow-hidden h-full">
-                            <div className="absolute -top-20 -right-20 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                            <div className={`absolute -top-20 -right-20 w-64 h-64 bg-${theme.primaryColor}-500/10 rounded-full blur-3xl pointer-events-none`}></div>
                             <div className="grid grid-cols-1 gap-6 relative z-10">
                                 <div>
                                     <Input label="Client" required placeholder="Rechercher..." list="client-suggestions" value={newInvoice.client} onChange={(e) => setNewInvoice({...newInvoice, client: e.target.value})} />
                                     <datalist id="client-suggestions">{uniqueClients.map((client, idx) => (<option key={idx} value={client} />))}</datalist>
                                 </div>
-                                <Select label="Type de Prestation" required options={SERVICE_TYPES} value={newInvoice.type} onChange={(e) => setNewInvoice({...newInvoice, type: e.target.value})} />
+                                <Select label="Type de Prestation" required options={(config.services || []).map(s => s.name)} value={newInvoice.type} onChange={(e) => setNewInvoice({...newInvoice, type: e.target.value})} />
                                 <Input label="Prix Facturé ($)" required type="number" prefix="$" placeholder="0.00" value={newInvoice.price} onChange={(e) => setNewInvoice({...newInvoice, price: e.target.value})} />
                             </div>
                             <div className="mt-8">
-                                <Button onClick={handleCreateInvoice} className="w-full py-4 text-lg shadow-indigo-500/25"><Save size={20} /> Enregistrer la facture</Button>
+                                <Button onClick={handleCreateInvoice} className="w-full py-4 text-lg" color={theme.primaryColor}><Save size={20} /> Enregistrer la facture</Button>
                             </div>
                         </GlassCard>
                     </div>
@@ -1341,9 +1420,9 @@
                                 </div>
                                 <div className="flex justify-between items-center text-sm">
                                     <span className="text-gray-500">
-                                        {newInvoice.type === 'Réparation' ? 'Coût Fixe' : 'Frais Custom'}
+                                        Coût/Taxe ({metrics.costPercent}%)
                                     </span>
-                                    <span className="font-mono text-red-400/70">-${calculateInvoiceMetrics(newInvoice.type, newInvoice.price).totalCost.toFixed(2)}</span>
+                                    <span className="font-mono text-red-400/70">-${metrics.totalCost.toFixed(2)}</span>
                                 </div>
                                 <div className="pt-2">
                                     <div className="flex justify-between items-center">
@@ -1355,11 +1434,8 @@
                                 </div>
                             </div>
                         </GlassCard>
-                        <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-sm text-indigo-200">
-                            {newInvoice.type === 'Réparation' 
-                                ? <p>La politique entreprise fixe le coût des réparations à <strong>50%</strong> du prix facturé.</p>
-                                : <p>Pour les Customs, un taux de <strong>{config.customCostPercent}%</strong> de frais est appliqué.</p>
-                            }
+                        <div className={`p-4 rounded-xl bg-${theme.primaryColor}-500/10 border border-${theme.primaryColor}-500/20 text-sm text-${theme.primaryColor}-200`}>
+                            <p>Le taux de charges pour <strong>{newInvoice.type || 'cette prestation'}</strong> est fixé à <strong>{metrics.costPercent}%</strong>.</p>
                         </div>
                     </div>
                   </div>
@@ -1382,7 +1458,7 @@
 
                 return (
                 <div className="animate-fadeIn h-full flex flex-col">
-                  <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} />
+                  <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} themeColor={theme.primaryColor} />
                   <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
                     <div>
                       <h2 className="text-3xl font-black text-white tracking-tight">Historique Hebdomadaire</h2>
@@ -1390,20 +1466,20 @@
                     </div>
                     <div className="flex gap-2 w-full md:w-auto">
                          <div className="relative group flex-1 md:w-64">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4 group-focus-within:text-indigo-400 transition-colors" />
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4 group-focus-within:text-white transition-colors" />
                             <input 
                               type="text" 
                               placeholder="Rechercher un client..." 
                               value={historySearch}
                               onChange={(e) => setHistorySearch(e.target.value)}
-                              className="w-full bg-black/40 border border-gray-700 rounded-xl py-2 pl-10 pr-4 text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition-all placeholder-gray-600"
+                              className={`w-full bg-black/40 border border-gray-700 rounded-xl py-2 pl-10 pr-4 text-white focus:border-${theme.primaryColor}-500 focus:ring-1 focus:ring-${theme.primaryColor}-500/20 outline-none transition-all placeholder-gray-600`}
                             />
                          </div>
                          <div className="relative group w-40">
                             <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
-                            <select value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value)} className="w-full bg-black/40 border border-gray-700 rounded-xl py-2 pl-9 pr-8 text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 appearance-none outline-none transition-all cursor-pointer">
+                            <select value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value)} className={`w-full bg-black/40 border border-gray-700 rounded-xl py-2 pl-9 pr-8 text-white focus:border-${theme.primaryColor}-500 focus:ring-1 focus:ring-${theme.primaryColor}-500/20 appearance-none outline-none transition-all cursor-pointer`}>
                               <option value="">Tout voir</option>
-                              {SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                              {(config.services || []).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                             </select>
                             <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500"><ChevronRight className="w-3 h-3 rotate-90" /></div>
                          </div>
@@ -1414,7 +1490,7 @@
                     <div className="overflow-auto custom-scrollbar flex-1">
                       <table className="w-full text-left border-collapse">
                         <thead className="sticky top-0 bg-gray-900/95 backdrop-blur-md z-10">
-                          <tr className="text-indigo-300 text-xs uppercase tracking-wider border-b border-gray-800">
+                          <tr className={`text-${theme.primaryColor}-300 text-xs uppercase tracking-wider border-b border-gray-800`}>
                             <th className="p-5 font-bold">Date</th>
                             <th className="p-5 font-bold">Client</th>
                             <th className="p-5 font-bold">Type</th>
@@ -1427,7 +1503,7 @@
                         </thead>
                         <tbody className="divide-y divide-gray-800/50">
                           {weeklyFilteredInvoices.map((inv) => (
-                            <tr key={inv.id} className="hover:bg-indigo-500/5 transition-colors group">
+                            <tr key={inv.id} className={`hover:bg-${theme.primaryColor}-500/5 transition-colors group`}>
                               <td className="p-5 text-gray-300 text-sm">{new Date(inv.date).toLocaleDateString()}</td>
                               <td className="p-5 font-medium text-white">{inv.client}</td>
                               <td className="p-5"><StatusBadge color="gray">{inv.type}</StatusBadge></td>
@@ -1442,7 +1518,7 @@
                                 </td>
                               )}
                               <td className="p-5 text-center">
-                                  <button onClick={() => generateInvoicePDF(inv)} className="p-2 bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-all" title="Télécharger PDF">
+                                  <button onClick={() => generateInvoicePDF(inv, theme)} className="p-2 bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-all" title="Télécharger PDF">
                                       <Download size={16}/>
                                   </button>
                               </td>
@@ -1479,8 +1555,8 @@
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {prices.map((category, catIdx) => (
                             <GlassCard key={catIdx} className="overflow-hidden">
-                                <div className="p-4 bg-indigo-900/30 border-b border-indigo-500/20">
-                                    <h3 className="font-bold text-white text-lg flex items-center gap-2"><Tag size={18} className="text-indigo-400"/> {category.category}</h3>
+                                <div className={`p-4 bg-${theme.primaryColor}-900/30 border-b border-${theme.primaryColor}-500/20`}>
+                                    <h3 className="font-bold text-white text-lg flex items-center gap-2"><Tag size={18} className={`text-${theme.primaryColor}-400`}/> {category.category}</h3>
                                 </div>
                                 <div className="divide-y divide-gray-800">
                                     {category.items.map((item, itemIdx) => (
@@ -1531,7 +1607,7 @@
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <GlassCard className="p-6">
-                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Terminal size={20} className="text-indigo-400"/> Commandes Mécaniques</h3>
+                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Terminal size={20} className={`text-${theme.primaryColor}-400`}/> Commandes Mécaniques</h3>
                             <div className="space-y-4">
                                 <div className="bg-black/30 p-3 rounded-lg border border-gray-700/50">
                                     <p className="text-xs text-gray-400 mb-1 uppercase font-bold">Débloquer une pièce en main</p>
@@ -1548,7 +1624,7 @@
                         </GlassCard>
 
                         <GlassCard className="p-6">
-                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Settings size={20} className="text-indigo-400"/> Commandes Workflow</h3>
+                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Settings size={20} className={`text-${theme.primaryColor}-400`}/> Commandes Workflow</h3>
                             <div className="space-y-2">
                                 {['/workflow:clear', '/workflow:close', '/workflow:cursor', '/workflow:open'].map(cmd => (
                                     <div key={cmd} className="flex items-center justify-between bg-black/30 p-2 rounded-lg border border-gray-700/50">
@@ -1559,9 +1635,9 @@
                         </GlassCard>
                     </div>
 
-                    <GlassCard className="p-6 border-t-4 border-t-purple-500">
+                    <GlassCard className={`p-6 border-t-4 border-t-${theme.secondaryColor || 'purple'}-500`}>
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold text-white flex items-center gap-2"><MessageSquare size={20} className="text-purple-400"/> Messages Prédéfinis</h3>
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2"><MessageSquare size={20} className={`text-${theme.secondaryColor || 'purple'}-400`}/> Messages Prédéfinis</h3>
                             {isBoss && (
                                 <button onClick={() => {
                                     if(isEditingMessages) saveCustomMessages();
@@ -1632,11 +1708,11 @@
                     {(isBoss || isLawyer) && applications.length > 0 && (
                         <div className="mb-8">
                              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                                <Briefcase size={20} className="text-indigo-400"/> Candidatures en attente ({applications.length})
+                                <Briefcase size={20} className={`text-${theme.primaryColor}-400`}/> Candidatures en attente ({applications.length})
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                 {applications.map(app => (
-                                    <GlassCard key={app.id} className="p-4 border border-indigo-500/30">
+                                    <GlassCard key={app.id} className={`p-4 border border-${theme.primaryColor}-500/30`}>
                                         <div className="flex justify-between items-start mb-2">
                                             <h4 className="font-bold text-white">{app.name}</h4>
                                             <span className="text-xs text-gray-500">{new Date(app.date).toLocaleDateString()}</span>
@@ -1665,9 +1741,9 @@
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         {canRecruit && (
                             <div className="lg:col-span-1">
-                                <GlassCard className="p-6 h-full border-t-4 border-t-indigo-500">
+                                <GlassCard className={`p-6 h-full border-t-4 border-t-${theme.primaryColor}-500`}>
                                     <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                                        <UserPlus size={20} className="text-indigo-400"/> Recrutement Manuel
+                                        <UserPlus size={20} className={`text-${theme.primaryColor}-400`}/> Recrutement Manuel
                                     </h3>
                                     <div className="space-y-4">
                                         <Input label="Nom complet" placeholder="Ex: John Doe" value={newEmployee.name} onChange={(e) => setNewEmployee({...newEmployee, name: e.target.value})} />
@@ -1676,7 +1752,7 @@
                                         <Input label="Lien Contrat (GDoc)" type="url" placeholder="https://..." value={newEmployee.contractUrl} onChange={(e) => setNewEmployee({...newEmployee, contractUrl: e.target.value})} />
                                         <Input label="IBAN" placeholder="LS89..." value={newEmployee.iban} onChange={(e) => setNewEmployee({...newEmployee, iban: e.target.value})} />
                                         <div className="pt-4">
-                                            <Button onClick={handleAddEmployee} className="w-full" variant="primary">Embaucher</Button>
+                                            <Button onClick={handleAddEmployee} className="w-full" variant="primary" color={theme.primaryColor}>Embaucher</Button>
                                         </div>
                                     </div>
                                 </GlassCard>
@@ -1687,7 +1763,7 @@
                             <GlassCard className="overflow-hidden h-full flex flex-col">
                                 <div className="p-4 border-b border-gray-800 bg-gray-900/50">
                                     <h3 className="font-bold text-white">Effectifs</h3>
-                                    {isBoss && dashboardTargetUser && <button onClick={() => setDashboardTargetUser(null)} className="text-xs text-indigo-400 hover:text-white">Retour liste</button>}
+                                    {isBoss && dashboardTargetUser && <button onClick={() => setDashboardTargetUser(null)} className={`text-xs text-${theme.primaryColor}-400 hover:text-white`}>Retour liste</button>}
                                 </div>
                                 <div className="overflow-auto custom-scrollbar flex-1 max-h-[600px]">
                                     <table className="w-full text-left">
@@ -1710,7 +1786,7 @@
                                                     <td className="p-4"><StatusBadge color={getGradeColor(emp.grade)}>{emp.grade}</StatusBadge></td>
                                                     <td className="p-4">
                                                         {emp.contractUrl ? (
-                                                            <a href={emp.contractUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 text-xs font-medium bg-indigo-500/10 px-2 py-1 rounded w-fit"><FileText size={12} /> Voir</a>
+                                                            <a href={emp.contractUrl} target="_blank" rel="noopener noreferrer" className={`text-${theme.primaryColor}-400 hover:text-${theme.primaryColor}-300 flex items-center gap-1 text-xs font-medium bg-${theme.primaryColor}-500/10 px-2 py-1 rounded w-fit`}><FileText size={12} /> Voir</a>
                                                         ) : (
                                                             <span className="text-red-400 text-xs italic font-bold flex items-center gap-1"><AlertCircle size={10}/> Manquant</span>
                                                         )}
@@ -1718,7 +1794,7 @@
                                                     <td className="p-4 text-center"><span className="font-mono text-xs text-gray-400">{emp.iban || '-'}</span></td>
                                                     <td className="p-4 text-center">
                                                         <div className="flex items-center justify-center gap-2">
-                                                            {isBoss && <button onClick={() => handleViewEmployeeStats(emp)} className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg hover:bg-indigo-500 hover:text-white transition-all" title="Voir Stats"><Eye size={16} /></button>}
+                                                            {isBoss && <button onClick={() => handleViewEmployeeStats(emp)} className={`p-2 bg-${theme.primaryColor}-500/10 text-${theme.primaryColor}-400 rounded-lg hover:bg-${theme.primaryColor}-500 hover:text-white transition-all`} title="Voir Stats"><Eye size={16} /></button>}
                                                             <button onClick={() => { setEditingEmployee({...emp}); setConfirmFire(false); }} className="p-2 bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500 hover:text-white transition-all" title="Modifier"><Edit size={16} /></button>
                                                         </div>
                                                     </td>
@@ -1732,29 +1808,29 @@
                     </div>
                     {editingEmployee && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
-                            <GlassCard className="w-full max-w-lg p-6 relative bg-gray-900 border border-indigo-500/30 shadow-2xl shadow-indigo-500/20">
+                            <GlassCard className={`w-full max-w-lg p-6 relative bg-gray-900 border border-${theme.primaryColor}-500/30 shadow-2xl shadow-${theme.primaryColor}-500/20`}>
                                 <button onClick={() => setEditingEmployee(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded-full transition-colors"><X size={24} /></button>
-                                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2"><div className="p-2 bg-indigo-500 rounded-lg text-white"><Edit size={20} /></div> Modifier Employé</h3>
+                                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2"><div className={`p-2 bg-${theme.primaryColor}-500 rounded-lg text-white`}><Edit size={20} /></div> Modifier Employé</h3>
                                 <div className="space-y-4">
                                     <Input label="Nom complet" value={editingEmployee.name} onChange={(e) => setEditingEmployee({...editingEmployee, name: e.target.value})} readOnly={!canEditFull} />
                                     <Input label="Date de naissance" type="date" value={editingEmployee.dob} onChange={(e) => setEditingEmployee({...editingEmployee, dob: e.target.value})} readOnly={!canEditFull}/>
                                     <Select label="Grade / Poste" options={grades.map(g => ({value: g.name, label: g.name}))} value={editingEmployee.grade} onChange={(e) => setEditingEmployee({...editingEmployee, grade: e.target.value})} readOnly={!canEditFull} />
                                     
-                                    <div className="p-2 bg-indigo-500/10 border border-indigo-500/30 rounded-xl space-y-2">
+                                    <div className={`p-2 bg-${theme.primaryColor}-500/10 border border-${theme.primaryColor}-500/30 rounded-xl space-y-2`}>
                                         <Input label="Lien Contrat (GDoc)" type="url" value={editingEmployee.contractUrl} onChange={(e) => setEditingEmployee({...editingEmployee, contractUrl: e.target.value})} prefix={<FileSignature size={14}/>}/>
                                         <Input label="IBAN" value={editingEmployee.iban} onChange={(e) => setEditingEmployee({...editingEmployee, iban: e.target.value})} prefix={<CreditCard size={14}/>}/>
                                     </div>
                                     
                                     {canEditFull && (
-                                        <div className="pt-4 mt-2 border-t border-gray-700/50 bg-indigo-500/5 p-4 rounded-xl">
-                                            <h4 className="text-sm font-bold text-indigo-300 uppercase mb-3 flex items-center gap-2"><Key size={14}/> Accès Sécurisé</h4>
+                                        <div className={`pt-4 mt-2 border-t border-gray-700/50 bg-${theme.primaryColor}-500/5 p-4 rounded-xl`}>
+                                            <h4 className={`text-sm font-bold text-${theme.primaryColor}-300 uppercase mb-3 flex items-center gap-2`}><Key size={14}/> Accès Sécurisé</h4>
                                             <Input label="Nouveau Mot de passe" type="text" prefix={<Lock size={14}/>} value={editingEmployee.password} onChange={(e) => setEditingEmployee({...editingEmployee, password: e.target.value})} placeholder="Définir un mot de passe..." />
                                         </div>
                                     )}
 
                                     <div className="pt-4 flex gap-3">
                                         <Button variant="secondary" onClick={() => setEditingEmployee(null)} className="flex-1">Annuler</Button>
-                                        <Button onClick={handleSaveEdit} className="flex-1 shadow-indigo-500/25">Enregistrer</Button>
+                                        <Button onClick={handleSaveEdit} className="flex-1 shadow-indigo-500/25" color={theme.primaryColor}>Enregistrer</Button>
                                     </div>
                                     
                                     {canEditFull && editingEmployee.id !== currentUser.id && (
@@ -1795,9 +1871,9 @@
                         {/* Form Column (Restricted) */}
                         {canEdit && (
                             <div className="lg:col-span-1">
-                                <GlassCard className="p-6 border-t-4 border-t-indigo-500 h-full flex flex-col">
+                                <GlassCard className={`p-6 border-t-4 border-t-${theme.primaryColor}-500 h-full flex flex-col`}>
                                     <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                                        <FileSignature size={20} className="text-indigo-400"/> {editingContractId ? 'Modifier Contrat' : 'Nouveau Contrat'}
+                                        <FileSignature size={20} className={`text-${theme.primaryColor}-400`}/> {editingContractId ? 'Modifier Contrat' : 'Nouveau Contrat'}
                                     </h3>
                                     <div className="space-y-4 flex-1">
                                         <Input label="Nom de l'entreprise" placeholder="Ex: LSPD" value={newContract.company} onChange={(e) => setNewContract({...newContract, company: e.target.value})} />
@@ -1809,9 +1885,9 @@
                                         
                                         {/* MODIFICATION ICI : Zone Conditions agrandie */}
                                         <div className="flex flex-col gap-2 w-full">
-                                            <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider ml-1">Conditions</label>
+                                            <label className={`text-xs font-bold text-${theme.primaryColor}-300 uppercase tracking-wider ml-1`}>Conditions</label>
                                             <textarea 
-                                                className="w-full bg-black/40 border border-gray-700 rounded-xl py-3 px-4 text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all text-lg min-h-[120px] resize-none"
+                                                className={`w-full bg-black/40 border border-gray-700 rounded-xl py-3 px-4 text-white placeholder-gray-600 focus:outline-none focus:border-${theme.primaryColor}-500 focus:ring-2 focus:ring-${theme.primaryColor}-500/20 transition-all text-lg min-h-[120px] resize-none`}
                                                 placeholder="Ex: Maintenance véhicules, tarifs préférentiels..."
                                                 value={newContract.description}
                                                 onChange={(e) => setNewContract({...newContract, description: e.target.value})}
@@ -1819,11 +1895,11 @@
                                         </div>
                                         
                                         <div className="pt-2 border-t border-gray-700/50 mt-2">
-                                            <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider mb-2 block">Documents Annexes</label>
+                                            <label className={`text-xs font-bold text-${theme.primaryColor}-300 uppercase tracking-wider mb-2 block`}>Documents Annexes</label>
                                             <div className="flex gap-2 mb-2">
                                                 <input className="w-1/2 bg-black/40 border border-gray-700 rounded-lg px-2 py-1 text-sm text-white" placeholder="Nom (ex: Tarifs)" value={tempDoc.name} onChange={(e) => setTempDoc({...tempDoc, name: e.target.value})}/>
                                                 <input className="w-1/2 bg-black/40 border border-gray-700 rounded-lg px-2 py-1 text-sm text-white" placeholder="URL" value={tempDoc.url} onChange={(e) => setTempDoc({...tempDoc, url: e.target.value})}/>
-                                                <button onClick={handleAddTempDoc} className="bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg p-1 transition-colors"><Plus size={16}/></button>
+                                                <button onClick={handleAddTempDoc} className={`bg-${theme.primaryColor}-500 hover:bg-${theme.primaryColor}-600 text-white rounded-lg p-1 transition-colors`}><Plus size={16}/></button>
                                             </div>
                                             {newContract.supplementaryDocs.length > 0 && (
                                                 <ul className="space-y-1 mb-4">
@@ -1836,7 +1912,7 @@
                                     </div>
                                     <div className="pt-4 mt-auto flex gap-2">
                                         {editingContractId && <Button variant="secondary" onClick={handleCancelContractEdit} className="flex-1">Annuler</Button>}
-                                        <Button onClick={handleSaveContract} className="flex-1">{editingContractId ? 'Sauvegarder' : 'Ajouter'}</Button>
+                                        <Button onClick={handleSaveContract} className="flex-1" color={theme.primaryColor}>{editingContractId ? 'Sauvegarder' : 'Ajouter'}</Button>
                                     </div>
                                 </GlassCard>
                             </div>
@@ -1846,10 +1922,10 @@
                             {contracts.map(contract => {
                                 const isExpired = contract.endDate && new Date(contract.endDate) < new Date();
                                 return (
-                                <GlassCard key={contract.id} className={`p-6 relative group border border-transparent transition-all ${isExpired ? 'border-red-500/30 bg-red-500/5' : 'hover:border-indigo-500/50'}`}>
+                                <GlassCard key={contract.id} className={`p-6 relative group border border-transparent transition-all ${isExpired ? 'border-red-500/30 bg-red-500/5' : `hover:border-${theme.primaryColor}-500/50`}`}>
                                     <div className="flex justify-between items-start mb-4">
                                         <div className="flex items-center gap-4">
-                                            <div className={`p-3 rounded-xl ${isExpired ? 'bg-red-500/20 text-red-400' : 'bg-indigo-500/10 text-indigo-400'}`}>
+                                            <div className={`p-3 rounded-xl ${isExpired ? 'bg-red-500/20 text-red-400' : `bg-${theme.primaryColor}-500/10 text-${theme.primaryColor}-400`}`}>
                                                 <Building size={28} />
                                             </div>
                                             <div>
@@ -1869,14 +1945,14 @@
                                         </div>
                                     </div>
                                     {/* MODIFICATION ICI : Affichage de la description agrandi */}
-                                    <p className="text-gray-300 text-base mb-6 pl-1 border-l-2 border-indigo-500/30 ml-2 whitespace-pre-wrap">{contract.description}</p>
+                                    <p className={`text-gray-300 text-base mb-6 pl-1 border-l-2 border-${theme.primaryColor}-500/30 ml-2 whitespace-pre-wrap`}>{contract.description}</p>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        <a href={contract.url} target="_blank" rel="noopener noreferrer" className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${contract.url ? 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-lg shadow-indigo-500/20' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}><FileText size={18} /> Contrat Principal</a>
+                                        <a href={contract.url} target="_blank" rel="noopener noreferrer" className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${contract.url ? `bg-gradient-to-r from-${theme.primaryColor}-600 to-${theme.primaryColor}-500 hover:from-${theme.primaryColor}-500 hover:to-${theme.primaryColor}-400 text-white shadow-lg shadow-${theme.primaryColor}-500/20` : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}><FileText size={18} /> Contrat Principal</a>
                                         {contract.supplementaryDocs && contract.supplementaryDocs.length > 0 && (
                                             <div className="flex flex-col gap-2">
                                                 {contract.supplementaryDocs.map((doc, i) => (
                                                     <a key={i} href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between px-4 py-2 bg-gray-800/50 hover:bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300 hover:text-white transition-colors">
-                                                        <span className="flex items-center gap-2"><Paperclip size={14} className="text-indigo-400"/> {doc.name}</span><ExternalLink size={12} className="opacity-50"/>
+                                                        <span className="flex items-center gap-2"><Paperclip size={14} className={`text-${theme.primaryColor}-400`}/> {doc.name}</span><ExternalLink size={12} className="opacity-50"/>
                                                     </a>
                                                 ))}
                                             </div>
@@ -1892,14 +1968,14 @@
 
              const renderSalaries = () => (
                  <div className="animate-fadeIn">
-                    <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} />
+                    <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} themeColor={theme.primaryColor} />
                     <div className="mb-8">
                         <h2 className="text-3xl font-black text-white tracking-tight">Salaires & Primes</h2>
                         <p className="text-gray-400">Suivi des objectifs de la semaine sélectionnée.</p>
                     </div>
                     {/* MODIFICATION ICI : Ajout du wrapper overflow-x-auto et min-width sur la table */}
                     <GlassCard className="overflow-hidden flex flex-col">
-                        <div className="p-1 bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500 opacity-20"></div>
+                        <div className={`p-1 bg-gradient-to-r from-${theme.secondaryColor || 'violet'}-500 via-${theme.primaryColor}-500 to-blue-500 opacity-20`}></div>
                         <div className="overflow-x-auto custom-scrollbar">
                             <table className="w-full text-left min-w-[900px]">
                                 <thead>
@@ -1927,7 +2003,7 @@
                                             <tr key={emp.id} className="group hover:bg-white/5 transition-colors">
                                                 <td className="p-5">
                                                     <div className="font-bold text-white text-lg">{emp.name}</div>
-                                                    <div className="text-xs text-indigo-400 font-medium uppercase tracking-wide">{emp.grade}</div>
+                                                    <div className={`text-xs text-${theme.primaryColor}-400 font-medium uppercase tracking-wide`}>{emp.grade}</div>
                                                 </td>
                                                 <td className="p-5">
                                                     <div className="flex flex-col gap-2">
@@ -1937,7 +2013,7 @@
                                                         </div>
                                                         {quota > 0 && (
                                                             <div className="h-2.5 bg-gray-800 rounded-full overflow-hidden shadow-inner">
-                                                                <div className={`h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden ${isComplete ? 'bg-gradient-to-r from-emerald-500 to-teal-400' : 'bg-gradient-to-r from-indigo-500 to-violet-500'}`} style={{width: `${progress}%`}}>
+                                                                <div className={`h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden ${isComplete ? 'bg-gradient-to-r from-emerald-500 to-teal-400' : `bg-gradient-to-r from-${theme.primaryColor}-500 to-${theme.secondaryColor || 'violet'}-500`}`} style={{width: `${progress}%`}}>
                                                                     <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
                                                                 </div>
                                                             </div>
@@ -1965,7 +2041,7 @@
                                                 </td>
                                                 <td className="p-5 text-center">
                                                     <button 
-                                                        onClick={() => generatePaySlipPDF(emp, { baseSalary: earnedSalary, bonus: finalBonus, total: earnedSalary + finalBonus }, selectedDate)}
+                                                        onClick={() => generatePaySlipPDF(emp, { baseSalary: earnedSalary, bonus: finalBonus, total: earnedSalary + finalBonus }, selectedDate, theme)}
                                                         className="p-2 bg-gray-800 hover:bg-white hover:text-black text-gray-400 rounded-lg transition-all border border-gray-700"
                                                         title="Télécharger Fiche de Paie"
                                                     >
@@ -1986,23 +2062,107 @@
                  <div className="animate-fadeIn max-w-4xl mx-auto space-y-8">
                     <div>
                         <h2 className="text-3xl font-black text-white tracking-tight">Configuration</h2>
-                        <p className="text-gray-400">Paramètres de rentabilité.</p>
+                        <p className="text-gray-400">Paramètres de l'entreprise.</p>
                     </div>
-                    <GlassCard className="p-6 border-t-4 border-t-emerald-500">
-                         <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                            <DollarSign size={20} className="text-emerald-400"/> Coûts & Taxes
+                    
+                    {/* --- THEME CUSTOMIZATION --- */}
+                    <GlassCard className={`p-6 border-t-4 border-t-${theme.secondaryColor || 'violet'}-500`}>
+                        <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                            <Palette size={20} className={`text-${theme.secondaryColor || 'violet'}-400`}/> Personnalisation du Site
                         </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                             <div>
-                                <Input label="Coût Réparation (% du prix)" type="number" value={config.repairCostPercent} onChange={(e) => saveConfig('repairCostPercent', e.target.value === '' ? 0 : parseFloat(e.target.value))} />
-                                <p className="text-xs text-gray-500 mt-2">Défaut: 50% du prix facturé part en coût.</p>
-                             </div>
-                             <div>
-                                 <Input label="Coût/Taxe Custom (% du prix)" type="number" value={config.customCostPercent} onChange={(e) => saveConfig('customCostPercent', e.target.value === '' ? 0 : parseFloat(e.target.value))} />
-                                 <p className="text-xs text-gray-500 mt-2">Défaut: 20% du prix facturé part en taxes/matériel.</p>
-                             </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div>
+                                <Input 
+                                    label="Nom du Garage / Titre App" 
+                                    value={theme.appName} 
+                                    onChange={(e) => saveTheme({ ...theme, appName: e.target.value })} 
+                                />
+                                <p className="text-xs text-gray-500 mt-2">Ce nom apparaîtra sur la barre latérale et les factures.</p>
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1 mb-2 block">Couleur Principale (Thème)</label>
+                                <div className="flex flex-wrap gap-2">
+                                    {THEME_COLORS.map(color => (
+                                        <button
+                                            key={color.name}
+                                            onClick={() => saveTheme({ ...theme, primaryColor: color.name })}
+                                            className={`w-8 h-8 rounded-full border-2 transition-all ${theme.primaryColor === color.name ? 'border-white scale-110 shadow-lg shadow-white/20' : 'border-transparent hover:scale-105'}`}
+                                            style={{ backgroundColor: color.hex }}
+                                            title={color.label}
+                                        />
+                                    ))}
+                                </div>
+                                <p className="text-xs text-gray-500 mt-2">Couleur utilisée pour les boutons, les icônes et les accents.</p>
+                            </div>
                         </div>
                     </GlassCard>
+
+                    {/* DYNAMIC SERVICE CONFIGURATION */}
+                    <GlassCard className={`p-6 border-t-4 border-t-emerald-500`}>
+                         <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                            <DollarSign size={20} className="text-emerald-400"/> Gestion des Prestations (Coûts & Taxes)
+                        </h3>
+                        <div className="space-y-4">
+                            {config.services && config.services.map((service, index) => (
+                                <div key={service.id || index} className="flex items-center gap-4 bg-gray-800/30 p-3 rounded-xl border border-gray-700/50">
+                                    <div className="flex-1">
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Nom Prestation</label>
+                                        <input 
+                                            type="text" 
+                                            value={service.name} 
+                                            onChange={(e) => {
+                                                const newServices = [...config.services];
+                                                newServices[index].name = e.target.value;
+                                                saveConfig('services', newServices);
+                                            }}
+                                            className={`bg-black/40 border border-gray-700 rounded-lg px-4 py-2 text-white w-full focus:border-emerald-500 outline-none`}
+                                            placeholder="Nom prestation"
+                                        />
+                                    </div>
+                                    <div className="w-1/3 relative">
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Coût / Taxe (%)</label>
+                                        <input 
+                                            type="number" 
+                                            value={service.costPercent} 
+                                            onChange={(e) => {
+                                                const newServices = [...config.services];
+                                                newServices[index].costPercent = parseFloat(e.target.value) || 0;
+                                                saveConfig('services', newServices);
+                                            }}
+                                            className={`bg-black/40 border border-gray-700 rounded-lg px-4 py-2 text-white w-full pr-8 focus:border-emerald-500 outline-none font-mono`}
+                                            placeholder="%"
+                                        />
+                                        <span className="absolute right-3 top-8 text-gray-500 pointer-events-none">%</span>
+                                    </div>
+                                    <div className="pt-6">
+                                        <button 
+                                            onClick={() => {
+                                                if(confirm("Supprimer cette prestation ?")) {
+                                                    const newServices = config.services.filter((_, i) => i !== index);
+                                                    saveConfig('services', newServices);
+                                                }
+                                            }}
+                                            className="p-2 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white rounded-lg transition-all border border-red-500/20"
+                                            title="Supprimer"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                            
+                            <button 
+                                onClick={() => {
+                                    const newServices = [...(config.services || []), { id: `srv_${Date.now()}`, name: 'Nouvelle Prestation', costPercent: 0 }];
+                                    saveConfig('services', newServices);
+                                }}
+                                className="w-full py-3 mt-4 border-2 border-dashed border-gray-700 rounded-xl text-gray-400 hover:text-white hover:border-emerald-500 hover:bg-emerald-500/10 flex items-center justify-center gap-2 transition-all font-bold"
+                            >
+                                <Plus size={18} /> Ajouter un type de prestation
+                            </button>
+                        </div>
+                    </GlassCard>
+
                     <GlassCard className="overflow-hidden">
                         <div className="px-6 py-4 border-b border-gray-800 bg-gray-900/50 flex justify-between items-center">
                             <h3 className="font-bold text-white">Grilles de Salaires</h3>
@@ -2014,14 +2174,22 @@
                                     <th className="p-4 text-center">Prime (%)</th>
                                     <th className="p-4 text-center">Salaire Max</th>
                                     <th className="p-4 text-center">Quota</th>
+                                    <th className="p-4 text-center">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-800">
                                 {grades.map(grade => (
                                     <tr key={grade.id} className="hover:bg-white/5 transition-colors">
-                                        <td className="p-4 pl-6 font-bold text-white">{grade.name}</td>
+                                        <td className="p-4 pl-6 font-bold text-white">
+                                            <input 
+                                                type="text" 
+                                                value={grade.name} 
+                                                onChange={(e) => handleUpdateGrade(grade.id, 'name', e.target.value)} 
+                                                className={`bg-black/40 border border-gray-700 rounded-lg px-2 py-1 w-full text-white font-bold focus:border-${theme.primaryColor}-500 outline-none`}
+                                            />
+                                        </td>
                                         <td className="p-4 text-center">
-                                            <input type="number" value={grade.primePercent} onChange={(e) => handleUpdateGrade(grade.id, 'primePercent', e.target.value === '' ? 0 : parseInt(e.target.value))} className="bg-black/40 border border-gray-700 rounded-lg px-2 py-1 w-20 text-center text-indigo-400 focus:border-indigo-500 outline-none font-mono" />
+                                            <input type="number" value={grade.primePercent} onChange={(e) => handleUpdateGrade(grade.id, 'primePercent', e.target.value === '' ? 0 : parseInt(e.target.value))} className={`bg-black/40 border border-gray-700 rounded-lg px-2 py-1 w-20 text-center text-${theme.primaryColor}-400 focus:border-${theme.primaryColor}-500 outline-none font-mono`} />
                                         </td>
                                         <td className="p-4 text-center">
                                             <input type="number" value={grade.maxSalary} onChange={(e) => handleUpdateGrade(grade.id, 'maxSalary', e.target.value === '' ? 0 : parseInt(e.target.value))} className="bg-black/40 border border-gray-700 rounded-lg px-2 py-1 w-24 text-center text-emerald-400 focus:border-emerald-500 outline-none font-mono" />
@@ -2029,10 +2197,18 @@
                                         <td className="p-4 text-center">
                                             <input type="number" value={grade.quota} onChange={(e) => handleUpdateGrade(grade.id, 'quota', e.target.value === '' ? 0 : parseInt(e.target.value))} className="bg-black/40 border border-gray-700 rounded-lg px-2 py-1 w-20 text-center text-white focus:border-white outline-none font-mono" />
                                         </td>
+                                        <td className="p-4 text-center">
+                                            <button onClick={() => handleDeleteGrade(grade.id)} className="p-2 text-red-400 hover:text-white hover:bg-red-500/20 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
+                        <div className="p-4 bg-gray-900/50 border-t border-gray-800">
+                            <button onClick={handleAddGrade} className={`w-full py-2 border-2 border-dashed border-gray-700 rounded-lg text-gray-500 hover:text-white hover:border-${theme.primaryColor}-500 hover:bg-${theme.primaryColor}-500/10 flex items-center justify-center gap-2 transition-all font-bold`}>
+                                <Plus size={16} /> Ajouter un Grade
+                            </button>
+                        </div>
                     </GlassCard>
                     
                     {/* New Danger Zone Card */}
@@ -2075,8 +2251,8 @@
                     <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-72 bg-[#0a0a0a] border-r border-white/5 flex flex-col transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
                         <div className="p-8 pb-4">
                             <div className="flex items-center gap-3 mb-1">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30"><Wallet size={20} /></div>
-                                <div><h1 className="text-xl font-black text-white tracking-tight">Southside <span className="text-indigo-500">Manager</span></h1><p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Business Panel</p></div>
+                                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br from-${theme.secondaryColor || 'violet'}-500 to-${theme.primaryColor}-600 flex items-center justify-center text-white shadow-lg shadow-${theme.primaryColor}-500/30`}><Wallet size={20} /></div>
+                                <div><h1 className="text-xl font-black text-white tracking-tight">{theme.appName.split(' ')[0]} <span className={`text-${theme.primaryColor}-500`}>{theme.appName.split(' ').slice(1).join(' ')}</span></h1><p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Business Panel</p></div>
                             </div>
                         </div>
 
@@ -2085,18 +2261,18 @@
                             {/* Hide operation tabs for Lawyer */}
                             {currentUser.grade !== 'Avocat' && (
                                 <>
-                                    <NavItem tabId="facture" icon={Plus} label="Nouvelle Facture" activeTab={activeTab} onClick={handleNavClick} />
-                                    <NavItem tabId="personal" icon={User} label="Mon Espace" activeTab={activeTab} onClick={handleNavClick} /> 
-                                    <NavItem tabId="historique" icon={History} label="Historique" activeTab={activeTab} onClick={handleNavClick} />
+                                    <NavItem tabId="facture" icon={Plus} label="Nouvelle Facture" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />
+                                    <NavItem tabId="personal" icon={User} label="Mon Espace" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} /> 
+                                    <NavItem tabId="historique" icon={History} label="Historique" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />
                                 </>
                             )}
                             
-                            <NavItem tabId="contracts" icon={FileSignature} label="Contrats" activeTab={activeTab} onClick={handleNavClick} />
+                            <NavItem tabId="contracts" icon={FileSignature} label="Contrats" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />
 
                             {currentUser.grade !== 'Avocat' && (
                                 <>
-                                    <NavItem tabId="tarifs" icon={Tag} label="Tarifs" activeTab={activeTab} onClick={handleNavClick} />
-                                    <NavItem tabId="aide" icon={HelpCircle} label="Aide & Commandes" activeTab={activeTab} onClick={handleNavClick} />
+                                    <NavItem tabId="tarifs" icon={Tag} label="Tarifs" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />
+                                    <NavItem tabId="aide" icon={HelpCircle} label="Aide & Commandes" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />
                                 </>
                             )}
                             
@@ -2104,13 +2280,13 @@
                             {(currentUser.role === 'admin' || currentUser.grade === 'Avocat') && (
                                 <>
                                     <p className="px-4 text-xs font-bold text-gray-600 uppercase tracking-wider mt-6 mb-2">Gestion</p>
-                                    {currentUser.role === 'admin' && <NavItem tabId="dashboard" icon={LayoutDashboard} label="Dashboard Global" activeTab={activeTab} onClick={handleNavClick} />}
-                                    <NavItem tabId="hr" icon={Briefcase} label="Ressources Humaines" activeTab={activeTab} onClick={handleNavClick} />
-                                    {currentUser.role === 'admin' && <NavItem tabId="salaires" icon={Award} label="Salaires & Primes" activeTab={activeTab} onClick={handleNavClick} />}
+                                    {currentUser.role === 'admin' && <NavItem tabId="dashboard" icon={LayoutDashboard} label="Dashboard Global" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />}
+                                    <NavItem tabId="hr" icon={Briefcase} label="Ressources Humaines" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />
+                                    {currentUser.role === 'admin' && <NavItem tabId="salaires" icon={Award} label="Salaires & Primes" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />}
                                     {currentUser.role === 'admin' && (
                                         <>
                                             <p className="px-4 text-xs font-bold text-gray-600 uppercase tracking-wider mt-6 mb-2">Admin</p>
-                                            <NavItem tabId="settings" icon={Settings} label="Configuration" activeTab={activeTab} onClick={handleNavClick} />
+                                            <NavItem tabId="settings" icon={Settings} label="Configuration" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />
                                         </>
                                     )}
                                 </>
@@ -2130,8 +2306,8 @@
                     </aside>
 
                     <main className="flex-1 relative h-screen overflow-hidden flex flex-col bg-gradient-to-br from-gray-900 via-black to-black">
-                        <div className="absolute top-0 left-0 w-full h-96 bg-indigo-900/10 blur-[100px] pointer-events-none"></div>
-                        <div className="absolute bottom-0 right-0 w-96 h-96 bg-violet-900/10 blur-[100px] pointer-events-none"></div>
+                        <div className={`absolute top-0 left-0 w-full h-96 bg-${theme.primaryColor}-900/10 blur-[100px] pointer-events-none`}></div>
+                        <div className={`absolute bottom-0 right-0 w-96 h-96 bg-${theme.secondaryColor || 'violet'}-900/10 blur-[100px] pointer-events-none`}></div>
 
                         <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-10 relative z-10">
                             {/* RENDER CONDITIONS */}
