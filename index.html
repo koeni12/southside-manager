@@ -1,0 +1,2306 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Southside Manager</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #050505; color: #e2e8f0; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.02); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fadeIn { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-slideUp { animation: slideUp 0.3s ease-out forwards; }
+        .status-dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; }
+    </style>
+
+    <!-- Import Map for Dependency Resolution -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom": "https://esm.sh/react-dom@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.263.1?external=react",
+            "recharts": "https://esm.sh/recharts@2.12.0?external=react,react-dom",
+            "jspdf": "https://esm.sh/jspdf@2.5.1",
+            "firebase/app": "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js",
+            "firebase/auth": "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js",
+            "firebase/firestore": "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js",
+            "firebase/analytics": "https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics.js"
+        }
+    }
+    </script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { 
+            LayoutDashboard, FileText, History, Users, BarChart3, Settings, LogOut, Plus, Trash2, Save, 
+            TrendingUp, Wallet, Award, Search, CheckCircle, AlertCircle, Menu, X, ChevronRight, ChevronLeft, 
+            Calendar, Lock, User, Briefcase, UserPlus, UserMinus, Edit, Calculator, DollarSign, Key, 
+            PieChart as PieIcon, Activity, Trophy, Filter, Unlock, Target, ExternalLink, 
+            FileSignature, Building, Paperclip, FilePlus, Clock, XCircle, Gavel, CreditCard, HelpCircle, 
+            Terminal, MessageSquare, Copy, Tag, Send, Phone, MessageCircle, CalendarDays, Eye, Download, Wifi, WifiOff
+        } from 'lucide-react';
+        import { 
+            BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, Legend 
+        } from 'recharts';
+        import { jsPDF } from 'jspdf';
+        
+        // --- Firebase Imports ---
+        import { initializeApp } from "firebase/app";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "firebase/auth";
+        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, setDoc, onSnapshot, query, orderBy, getDocs, writeBatch } from "firebase/firestore";
+        import { getAnalytics } from "firebase/analytics";
+
+        // ==========================================
+        // 1. CONFIGURATION & MOCK DATA (Initial Seeds)
+        // ==========================================
+
+        // Robust Firebase Initialization
+        let app, auth, db, analytics;
+        let appId = 'default-app-id';
+
+        try {
+            // Priority: Environment Config > User Config
+            const firebaseConfig = typeof __firebase_config !== 'undefined' 
+                ? JSON.parse(__firebase_config) 
+                : {
+                    apiKey: "AIzaSyB-EcSw-43CbNDYg_q5BLU9jL7HjGhZf78",
+                    authDomain: "southside-custom.firebaseapp.com",
+                    projectId: "southside-custom",
+                    storageBucket: "southside-custom.firebasestorage.app",
+                    messagingSenderId: "89724035455",
+                    appId: "1:89724035455:web:b50bb76124829175ccba4a",
+                    measurementId: "G-R9CXF4WBP0"
+                };
+            
+            if (typeof __app_id !== 'undefined') {
+                appId = __app_id;
+            }
+
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+            
+            try {
+                analytics = getAnalytics(app);
+            } catch (e) {
+                console.log("Analytics initialization skipped:", e);
+            }
+
+        } catch (e) {
+            console.error("Firebase init failed:", e);
+        }
+
+        // --- Initial Data for Seeding & Offline Mode ---
+        const INITIAL_CONFIG = { repairCostPercent: 50, customCostPercent: 20, overheadCost: 0 };
+        const INITIAL_GRADES = [
+            { id: 'g1', name: 'Patron', primePercent: 20, maxSalary: 5000, quota: 25 },
+            { id: 'g2', name: 'Co-patron', primePercent: 20, maxSalary: 4000, quota: 25 },
+            { id: 'g_avocat', name: 'Avocat', primePercent: 10, maxSalary: 3500, quota: 0 },
+            { id: 'g3', name: 'Chef d\'équipe', primePercent: 20, maxSalary: 3000, quota: 25 },
+            { id: 'g4', name: 'Mécano', primePercent: 15, maxSalary: 2000, quota: 25 },
+            { id: 'g5', name: 'Apprenti', primePercent: 10, maxSalary: 1000, quota: 25 },
+        ];
+        const INITIAL_EMPLOYEES = [
+            { id: 'e1', name: 'Edy Thomas', grade: 'Co-patron', role: 'admin', password: '123', dob: '1995-05-20', contractUrl: 'https://docs.google.com', iban: 'LS89 3000 4000 1234 5678' },
+            { id: 'e2', name: 'Hector Trueman', grade: 'Patron', role: 'admin', password: '123', dob: '1990-12-10', contractUrl: '', iban: 'LS89 1000 2000 9876 5432' },
+            { id: 'e3', name: 'Mick Maccauley', grade: 'Chef d\'équipe', role: 'user', password: '123', dob: '1998-03-15', contractUrl: '', iban: 'LS89 5555 6666 7777 8888' },
+            { id: 'e4', name: 'Tyler Peterson', grade: 'Chef d\'équipe', role: 'user', password: '123', dob: '2000-07-08', contractUrl: '', iban: '' },
+            { id: 'e5', name: 'Marcelin Métier', grade: 'Mécano', role: 'user', password: '123', dob: '1992-11-30', contractUrl: '', iban: '' },
+            { id: 'e6', name: 'Jean-Baptiste Aigri', grade: 'Mécano', role: 'user', password: '123', dob: '1985-02-14', contractUrl: '', iban: '' },
+            { id: 'e_law', name: 'Saul Goodman', grade: 'Avocat', role: 'user', password: '123', dob: '1980-05-12', contractUrl: 'https://docs.google.com', iban: 'LS99 9999 9999 9999 9999' },
+        ];
+        const INITIAL_MESSAGES = {
+            open: "🔓 Le Southside Garage est ouvert ! Venez nous voir pour vos réparations et customs.",
+            close: "🔒 Le Southside Garage ferme ses portes. À bientôt !"
+        };
+        const SERVICE_TYPES = ['Réparation', 'Custom', 'Nettoyage', 'Dépannage', 'Autre'];
+        
+        const INITIAL_GARAGE_PRICES = [
+            { category: 'Entretien', items: [{ name: 'Réparation Moteur', price: 250 }, { name: 'Réparation Carrosserie', price: 150 }, { name: 'Nettoyage Complet', price: 80 }, { name: 'Dépannage / Remorquage', price: 200 }] },
+            { category: 'Performance', items: [{ name: 'Moteur Niveau 1', price: 2500 }, { name: 'Moteur Niveau 2', price: 5000 }, { name: 'Moteur Niveau 3', price: 8500 }, { name: 'Transmission Sport', price: 3000 }, { name: 'Freins Course', price: 2800 }, { name: 'Turbo', price: 6000 }] },
+            { category: 'Modification Extérieur', items: [{ name: 'Peinture Complète', price: 1200 }, { name: 'Kit Carrosserie', price: 3500 }, { name: 'Néons (Kit complet)', price: 1500 }, { name: 'Jantes Custom', price: 1800 }, { name: 'Vitres Teintées', price: 500 }, { name: 'Livrée / Stickers', price: 2500 }] },
+            { category: 'Modification Intérieur', items: [{ name: 'Tableau de bord', price: 1000 }, { name: 'Sièges / Sellerie', price: 1500 }, { name: 'Volant Racing', price: 600 }, { name: 'Arceau Cage', price: 2000 }, { name: 'Compteurs Custom', price: 800 }] }
+        ];
+        
+        const INITIAL_INVOICES = [
+            { id: 101, date: '2026-02-08T10:00:00', client: 'Jean Dupont', type: 'Réparation', price: 150, profit: 75, bonus: 15, employeeId: 'e2', employeeName: 'Hector Trueman' },
+            { id: 102, date: '2026-02-08T11:30:00', client: 'Alice Wonderland', type: 'Custom', price: 2500, profit: 2000, bonus: 400, employeeId: 'e1', employeeName: 'Edy Thomas' },
+            { id: 103, date: '2026-02-09T09:15:00', client: 'Bob Builder', type: 'Réparation', price: 200, profit: 100, bonus: 15, employeeId: 'e5', employeeName: 'Marcelin Métier' },
+            { id: 104, date: '2026-02-09T14:00:00', client: 'Mike Ross', type: 'Custom', price: 5000, profit: 4000, bonus: 600, employeeId: 'e3', employeeName: 'Mick Maccauley' },
+            { id: 105, date: '2026-02-10T10:00:00', client: 'Jean Dupont', type: 'Réparation', price: 300, profit: 150, bonus: 30, employeeId: 'e2', employeeName: 'Hector Trueman' },
+        ];
+        const INITIAL_CONTRACTS = [
+            { id: 'c1', company: 'LSPD', date: '2026-01-15', endDate: '2027-01-15', description: 'Maintenance des véhicules de patrouille', url: 'https://docs.google.com', supplementaryDocs: [{ name: 'Grille Tarifaire 2026', url: 'https://docs.google.com' }] },
+            { id: 'c2', company: 'EMS', date: '2025-02-01', endDate: '2026-02-01', description: 'Réparations prioritaires ambulances', url: '', supplementaryDocs: [] },
+        ];
+        const INITIAL_APPLICATIONS = [
+            { id: 'app1', name: 'Jesse Pinkman', dob: '1998-09-20', ageHRP: '25', phoneRP: '555-0192', discord: 'jesse#1234', availability: 'Soirs', motivation: 'Je sais bien bricoler.', date: '2026-02-11T10:00:00' }
+        ];
+        const INITIAL_SERVICE_LOGS = [
+            { id: 1, employeeId: 'e2', employeeName: 'Hector Trueman', start: '2026-02-08T08:00:00', end: '2026-02-08T12:00:00' },
+            { id: 2, employeeId: 'e2', employeeName: 'Hector Trueman', start: '2026-02-08T14:00:00', end: '2026-02-08T18:00:00' },
+            { id: 3, employeeId: 'e3', employeeName: 'Mick Maccauley', start: '2026-02-09T10:00:00', end: '2026-02-09T15:00:00' },
+        ];
+
+        // ==========================================
+        // 2. HELPER FUNCTIONS
+        // ==========================================
+
+        const getStartOfWeek = (date) => {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            d.setDate(diff);
+            d.setHours(0,0,0,0);
+            return d;
+        };
+
+        const getEndOfWeek = (date) => {
+            const d = getStartOfWeek(date);
+            d.setDate(d.getDate() + 6);
+            d.setHours(23,59,59,999);
+            return d;
+        };
+
+        const formatDateRange = (start, end) => {
+            return `${start.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`;
+        };
+
+        const getDurationInHours = (startStr, endStr) => {
+            const start = new Date(startStr);
+            const end = endStr ? new Date(endStr) : new Date(); 
+            const diffMs = end - start;
+            return diffMs / (1000 * 60 * 60);
+        };
+        
+        const getGradeColor = (grade) => {
+            const lowerGrade = grade?.toLowerCase() || '';
+            if (lowerGrade.includes('patron') && !lowerGrade.includes('co')) return 'red';
+            if (lowerGrade.includes('co-patron')) return 'amber';
+            if (lowerGrade.includes('avocat')) return 'purple';
+            if (lowerGrade.includes('chef')) return 'blue';
+            if (lowerGrade.includes('mécano')) return 'green';
+            return 'gray';
+        };
+
+        // --- PDF GENERATOR ---
+        const generateInvoicePDF = (invoice) => {
+            const doc = new jsPDF();
+            doc.setFillColor(79, 70, 229); 
+            doc.rect(0, 0, 210, 30, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(22);
+            doc.setFont('helvetica', 'bold');
+            doc.text("SOUTHSIDE GARAGE", 105, 20, { align: 'center' });
+            
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(14);
+            doc.text(`Reçu de Facture #${invoice.id}`, 105, 50, { align: 'center' });
+            
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Date : ${new Date(invoice.date).toLocaleDateString()} à ${new Date(invoice.date).toLocaleTimeString()}`, 20, 70);
+            doc.text(`Client : ${invoice.client}`, 20, 80);
+            doc.text(`Employé : ${invoice.employeeName}`, 20, 90);
+            
+            doc.setDrawColor(200, 200, 200);
+            doc.line(20, 100, 190, 100);
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text("Description", 20, 110);
+            doc.text("Montant", 190, 110, { align: 'right' });
+            
+            doc.line(20, 115, 190, 115);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`${invoice.type}`, 20, 125);
+            doc.text(`$${invoice.price.toLocaleString()}`, 190, 125, { align: 'right' });
+            
+            doc.line(20, 140, 190, 140);
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.text("TOTAL :", 140, 150);
+            doc.text(`$${invoice.price.toLocaleString()}`, 190, 150, { align: 'right' });
+            
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(100, 100, 100);
+            doc.text("Merci de votre confiance !", 105, 180, { align: 'center' });
+            
+            doc.save(`facture_southside_${invoice.id}.pdf`);
+        };
+
+        // --- PAY SLIP GENERATOR ---
+        const generatePaySlipPDF = (employee, salaryData, periodStart) => {
+            const doc = new jsPDF();
+            const start = getStartOfWeek(periodStart);
+            const end = getEndOfWeek(periodStart);
+            const periodStr = `${start.toLocaleDateString()} au ${end.toLocaleDateString()}`;
+
+            // Fond noir
+            doc.setFillColor(15, 15, 15);
+            doc.rect(0, 0, 210, 297, 'F');
+            
+            // Header
+            doc.setFillColor(30, 30, 30);
+            doc.rect(0, 0, 210, 40, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(22);
+            doc.setFont('helvetica', 'bold');
+            doc.text("FICHE DE PAIE", 105, 20, { align: 'center' });
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'normal');
+            doc.text("SOUTHSIDE GARAGE", 105, 30, { align: 'center' });
+
+            // Info Employé
+            doc.setTextColor(255, 255, 255);
+            doc.setFontSize(10);
+            doc.text("EMPLOYÉ:", 20, 60);
+            doc.setFont('helvetica', 'bold');
+            doc.text(employee.name.toUpperCase(), 20, 66);
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Grade: ${employee.grade}`, 20, 72);
+            
+            // Info Période
+            doc.text("PÉRIODE:", 120, 60);
+            doc.text(periodStr, 120, 66);
+            doc.text(`Date d'émission: ${new Date().toLocaleDateString()}`, 120, 72);
+
+            // Ligne
+            doc.setDrawColor(80, 80, 80);
+            doc.line(20, 85, 190, 85);
+
+            // Tableau
+            doc.setFont('helvetica', 'bold');
+            doc.text("DÉSIGNATION", 20, 95);
+            doc.text("MONTANT", 190, 95, { align: 'right' });
+            doc.line(20, 100, 190, 100);
+
+            let y = 115;
+            doc.setFont('helvetica', 'normal');
+            
+            // Salaire de base
+            doc.text("Salaire Fixe (Prorata Activité)", 20, y);
+            doc.text(`$${salaryData.baseSalary.toLocaleString()}`, 190, y, { align: 'right' });
+            y += 10;
+
+            // Primes
+            if (salaryData.bonus > 0) {
+                doc.setTextColor(16, 185, 129); // Vert
+                doc.text("Prime sur Objectif (Quota Atteint)", 20, y);
+                doc.text(`$${salaryData.bonus.toLocaleString()}`, 190, y, { align: 'right' });
+                doc.setTextColor(255, 255, 255);
+                y += 10;
+            } else {
+                doc.setTextColor(150, 150, 150);
+                doc.text("Prime sur Objectif (Non Atteint)", 20, y);
+                doc.text("$0", 190, y, { align: 'right' });
+                doc.setTextColor(255, 255, 255);
+                y += 10;
+            }
+
+            // Total
+            doc.setDrawColor(255, 255, 255);
+            doc.line(20, y + 10, 190, y + 10);
+            y += 25;
+            
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.text("NET À PAYER", 130, y);
+            doc.text(`$${salaryData.total.toLocaleString()}`, 190, y, { align: 'right' });
+
+            // Footer IBAN
+            y += 20;
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(150, 150, 150);
+            doc.text("Virement à effectuer sur le compte :", 20, y);
+            doc.setFont('helvetica', 'bold');
+            doc.text(employee.iban || "IBAN NON RENSEIGNÉ", 20, y + 6);
+
+            doc.save(`fiche_paie_${employee.name.replace(/ /g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+        };
+
+        // ==========================================
+        // 3. UI COMPONENTS
+        // ==========================================
+
+        const GlassCard = ({ children, className = "" }) => (
+            <div className={`bg-gray-900/60 backdrop-blur-xl border border-white/5 rounded-2xl shadow-xl ${className}`}>
+                {children}
+            </div>
+        );
+
+        const Button = ({ children, onClick, variant = 'primary', className = "", disabled = false, type="button" }) => {
+            const baseStyle = "px-5 py-2.5 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95";
+            const variants = {
+                primary: "bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white shadow-lg shadow-indigo-500/30 border border-indigo-500/20",
+                danger: "bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-lg shadow-red-500/20",
+                secondary: "bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700",
+                ghost: "bg-transparent hover:bg-white/5 text-gray-400 hover:text-white",
+                success: "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/30"
+            };
+            return <button type={type} onClick={onClick} className={`${baseStyle} ${variants[variant]} ${className}`} disabled={disabled}>{children}</button>;
+        };
+
+        const Input = ({ label, type = "text", value, onChange, placeholder, required = false, prefix, readOnly = false, list }) => (
+            <div className="flex flex-col gap-2 w-full">
+                {label && <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider ml-1">{label} {required && "*"}</label>}
+                <div className="relative group">
+                {prefix && <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-indigo-400 transition-colors">{prefix}</span>}
+                <input type={type} value={value} onChange={onChange} readOnly={readOnly} placeholder={placeholder} list={list} className={`w-full bg-black/40 border border-gray-700 rounded-xl py-3 px-4 text-gray-100 placeholder-gray-600 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all ${prefix ? 'pl-9' : ''} ${readOnly ? 'cursor-not-allowed opacity-60' : ''}`}/>
+                </div>
+            </div>
+        );
+
+        const Select = ({ label, value, onChange, options, required = false, readOnly = false }) => (
+            <div className="flex flex-col gap-2 w-full">
+                {label && <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider ml-1">{label} {required && "*"}</label>}
+                <div className="relative">
+                <select value={value} onChange={onChange} disabled={readOnly} className={`w-full bg-black/40 border border-gray-700 rounded-xl py-3 px-4 text-gray-100 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 appearance-none transition-all ${readOnly ? 'cursor-not-allowed opacity-60' : ''}`}>
+                    <option value="">Sélectionner...</option>
+                    {options.map((opt, idx) => (<option key={idx} value={opt.value || opt}>{opt.label || opt}</option>))}
+                </select>
+                {!readOnly && <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500"><ChevronRight className="w-4 h-4 rotate-90" /></div>}
+                </div>
+            </div>
+        );
+
+        const StatusBadge = ({ children, color = "blue" }) => {
+            const styles = {
+                blue: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+                green: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+                purple: "bg-violet-500/10 text-violet-400 border-violet-500/20",
+                gray: "bg-gray-700/50 text-gray-400 border-gray-600",
+                red: "bg-red-500/10 text-red-400 border-red-500/20",
+                amber: "bg-amber-500/10 text-amber-400 border-amber-500/20"
+            };
+            return <span className={`px-3 py-1 rounded-lg text-xs font-bold tracking-wide border ${styles[color] || styles.blue}`}>{children}</span>;
+        };
+        
+        const NavItem = ({ tabId, icon: Icon, label, activeTab, onClick }) => (
+            <button onClick={() => onClick(tabId)} className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-300 group ${activeTab === tabId ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-indigo-500/25' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}>
+                <Icon size={20} className={`transition-transform duration-300 ${activeTab === tabId ? 'scale-110' : 'group-hover:scale-110'}`} />
+                <span className="font-medium tracking-wide">{label}</span>
+                {activeTab === tabId && <ChevronRight size={16} className="ml-auto opacity-70" />}
+            </button>
+        );
+
+        const WeekNavigator = ({ selectedDate, onPrev, onNext }) => {
+            const start = getStartOfWeek(selectedDate);
+            const end = getEndOfWeek(selectedDate);
+            return (
+                <div className="flex items-center gap-4 bg-gray-800/50 p-2 rounded-xl border border-gray-700/50 mb-6 w-fit">
+                    <button onClick={onPrev} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors"><ChevronLeft size={20} /></button>
+                    <div className="flex items-center gap-2 px-2"><Calendar size={18} className="text-indigo-400" /><span className="text-sm font-bold text-white font-mono uppercase tracking-wide">{formatDateRange(start, end)}</span></div>
+                    <button onClick={onNext} className="p-2 hover:bg-gray-700 rounded-lg text-gray-400 hover:text-white transition-colors"><ChevronRight size={20} /></button>
+                </div>
+            );
+        };
+
+        // ==========================================
+        // 4. MAIN APPLICATION
+        // ==========================================
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('facture');
+            const [currentUser, setCurrentUser] = useState(null); 
+            const [dashboardTargetUser, setDashboardTargetUser] = useState(null); 
+            const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+            const [authUser, setAuthUser] = useState(null); // Firebase Auth State
+            const [isOffline, setIsOffline] = useState(false); // Offline Fallback State
+
+            // Data State (Managed by Firestore Subscriptions or Local State)
+            const [config, setConfig] = useState(INITIAL_CONFIG);
+            const [employees, setEmployees] = useState([]);
+            const [contracts, setContracts] = useState([]);
+            const [grades, setGrades] = useState(INITIAL_GRADES);
+            const [invoices, setInvoices] = useState([]);
+            const [prices, setPrices] = useState(INITIAL_GARAGE_PRICES);
+            const [applications, setApplications] = useState([]);
+            const [serviceLogs, setServiceLogs] = useState([]); 
+            const [customMessages, setCustomMessages] = useState(INITIAL_MESSAGES);
+
+            const [isEditingPrices, setIsEditingPrices] = useState(false);
+            const [isEditingMessages, setIsEditingMessages] = useState(false);
+            
+            // UI States
+            const [authMode, setAuthMode] = useState('login'); 
+            const [applicationForm, setApplicationForm] = useState({ name: '', dob: '', motivation: '', ageHRP: '', availability: '', phoneRP: '', discord: '' });
+            const [selectedDate, setSelectedDate] = useState(new Date());
+            const [historySearch, setHistorySearch] = useState('');
+            const [historyFilter, setHistoryFilter] = useState('');
+            const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+            const [loginError, setLoginError] = useState('');
+            const [newInvoice, setNewInvoice] = useState({ client: '', type: '', price: '' });
+            const [newEmployee, setNewEmployee] = useState({ name: '', grade: '', dob: '', contractUrl: '', iban: '' });
+            const [newContract, setNewContract] = useState({ company: '', date: '', endDate: '', description: '', url: '', supplementaryDocs: [] });
+            const [editingContractId, setEditingContractId] = useState(null);
+            const [tempDoc, setTempDoc] = useState({ name: '', url: '' });
+            const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+            const [editingEmployee, setEditingEmployee] = useState(null);
+            const [confirmFire, setConfirmFire] = useState(false); 
+            const [confirmReset, setConfirmReset] = useState(false);
+            const [notification, setNotification] = useState(null);
+
+            // GLOBAL PERMISSIONS
+            const isBoss = currentUser ? ['Patron', 'Co-patron'].includes(currentUser.grade) : false;
+            const isLawyer = currentUser ? currentUser.grade === 'Avocat' : false;
+
+            // --- FIREBASE SETUP ---
+            
+            // 1. Auth & Seeding
+            useEffect(() => {
+                if (!auth) return;
+
+                const initAuth = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (err) {
+                        console.error("Auth failed:", err);
+                        // Fallback to offline mode on auth failure (e.g., restricted operation)
+                        setIsOffline(true);
+                        setNotification({ msg: "Mode Hors-ligne activé (Erreur Firebase: " + err.code + "). Les données seront sauvegardées localement.", type: 'warning' });
+                    }
+                };
+                initAuth();
+                const unsubscribe = onAuthStateChanged(auth, (user) => {
+                    setAuthUser(user);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            // 2. Data Subscriptions & Offline Fallback with LOCAL STORAGE
+            useEffect(() => {
+                // If offline mode is forced (e.g. auth failed), load local
+                if (isOffline) {
+                    const loadLocal = (key, fallback) => {
+                        try {
+                            const item = localStorage.getItem(`southside_${key}`);
+                            return item ? JSON.parse(item) : fallback;
+                        } catch (e) {
+                            console.error("Local storage read error", e);
+                            return fallback;
+                        }
+                    };
+
+                    setInvoices(loadLocal('invoices', INITIAL_INVOICES));
+                    setEmployees(loadLocal('employees', INITIAL_EMPLOYEES));
+                    setContracts(loadLocal('contracts', INITIAL_CONTRACTS));
+                    setApplications(loadLocal('applications', INITIAL_APPLICATIONS));
+                    setServiceLogs(loadLocal('serviceLogs', INITIAL_SERVICE_LOGS));
+                    setGrades(loadLocal('grades', INITIAL_GRADES));
+                    setPrices(loadLocal('prices', INITIAL_GARAGE_PRICES));
+                    setConfig(loadLocal('config', INITIAL_CONFIG));
+                    setCustomMessages(loadLocal('customMessages', INITIAL_MESSAGES));
+                    return;
+                }
+
+                if (!authUser) return;
+
+                // --- Collections ---
+                // Helper to handle permission errors
+                const handleSnapshotError = (err) => {
+                    console.error("Firestore Error:", err);
+                    if (err.code === 'permission-denied') {
+                        setIsOffline(true); // Fallback to offline mode
+                        setNotification({ msg: "Accès refusé par Firebase (Permission Denied). Passage en mode hors-ligne pour continuer.", type: 'error' });
+                    }
+                };
+
+                const unsubInvoices = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'invoices'), (snap) => {
+                    setInvoices(snap.docs.map(d => ({ id: d.id, ...d.data(), docId: d.id })).sort((a,b) => new Date(b.date) - new Date(a.date)));
+                }, handleSnapshotError);
+                
+                const unsubEmployees = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), (snap) => {
+                    // FIX: Capture both internal 'id' and Firestore 'docId' (d.id) to ensure updates/deletes work
+                    const empList = snap.docs.map(d => ({ ...d.data(), docId: d.id }));
+                    setEmployees(empList);
+                    // SEEDING LOGIC: If no employees, add defaults
+                    if (snap.empty) {
+                        INITIAL_EMPLOYEES.forEach(emp => addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), emp));
+                    }
+                }, handleSnapshotError);
+
+                const unsubContracts = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'contracts'), (snap) => {
+                    setContracts(snap.docs.map(d => ({ id: d.id, ...d.data(), docId: d.id })));
+                }, handleSnapshotError);
+
+                const unsubApps = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'applications'), (snap) => {
+                    setApplications(snap.docs.map(d => ({ id: d.id, ...d.data(), docId: d.id })));
+                }, handleSnapshotError);
+
+                const unsubLogs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'service_logs'), (snap) => {
+                    setServiceLogs(snap.docs.map(d => ({ id: d.id, ...d.data(), docId: d.id })));
+                }, handleSnapshotError);
+
+                // --- Settings Documents ---
+                const unsubGrades = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'grades'), (docSnap) => {
+                    if (docSnap.exists()) setGrades(docSnap.data().list);
+                    else setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'grades'), { list: INITIAL_GRADES });
+                }, handleSnapshotError);
+
+                const unsubPrices = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'prices'), (docSnap) => {
+                    if (docSnap.exists()) setPrices(docSnap.data().list);
+                    else setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'prices'), { list: INITIAL_GARAGE_PRICES });
+                }, handleSnapshotError);
+
+                const unsubConfig = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), (docSnap) => {
+                    if (docSnap.exists()) setConfig(docSnap.data());
+                    else setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), INITIAL_CONFIG);
+                }, handleSnapshotError);
+
+                const unsubMessages = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'messages'), (docSnap) => {
+                    if (docSnap.exists()) setCustomMessages(docSnap.data());
+                    else setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'messages'), INITIAL_MESSAGES);
+                }, handleSnapshotError);
+
+                return () => {
+                    unsubInvoices(); unsubEmployees(); unsubContracts(); unsubApps(); unsubLogs();
+                    unsubGrades(); unsubPrices(); unsubConfig(); unsubMessages();
+                };
+            }, [authUser, isOffline]);
+
+            // --- LOCAL STORAGE EFFECTS FOR OFFLINE PERSISTENCE ---
+            // These effects only run if isOffline is true to save state changes
+            useEffect(() => { if (isOffline) localStorage.setItem('southside_invoices', JSON.stringify(invoices)); }, [invoices, isOffline]);
+            useEffect(() => { if (isOffline) localStorage.setItem('southside_employees', JSON.stringify(employees)); }, [employees, isOffline]);
+            useEffect(() => { if (isOffline) localStorage.setItem('southside_contracts', JSON.stringify(contracts)); }, [contracts, isOffline]);
+            useEffect(() => { if (isOffline) localStorage.setItem('southside_applications', JSON.stringify(applications)); }, [applications, isOffline]);
+            useEffect(() => { if (isOffline) localStorage.setItem('southside_serviceLogs', JSON.stringify(serviceLogs)); }, [serviceLogs, isOffline]);
+            useEffect(() => { if (isOffline) localStorage.setItem('southside_grades', JSON.stringify(grades)); }, [grades, isOffline]);
+            useEffect(() => { if (isOffline) localStorage.setItem('southside_prices', JSON.stringify(prices)); }, [prices, isOffline]);
+            useEffect(() => { if (isOffline) localStorage.setItem('southside_config', JSON.stringify(config)); }, [config, isOffline]);
+            useEffect(() => { if (isOffline) localStorage.setItem('southside_customMessages', JSON.stringify(customMessages)); }, [customMessages, isOffline]);
+
+
+             // --- Sorting Logic ---
+            const sortedEmployees = useMemo(() => {
+                if (!grades.length) return employees;
+                const gradeWeights = {};
+                grades.forEach((g, i) => gradeWeights[g.name] = i);
+                
+                return [...employees].sort((a, b) => {
+                    const weightA = gradeWeights[a.grade] !== undefined ? gradeWeights[a.grade] : 999;
+                    const weightB = gradeWeights[b.grade] !== undefined ? gradeWeights[b.grade] : 999;
+                    return weightA - weightB;
+                });
+            }, [employees, grades]);
+
+
+            // --- Derived Statistics ---
+            const weeklyStats = useMemo(() => {
+                const start = getStartOfWeek(selectedDate);
+                const end = getEndOfWeek(selectedDate);
+
+                const weeklyInvoices = invoices.filter(inv => {
+                    const invDate = new Date(inv.date);
+                    return invDate >= start && invDate <= end;
+                });
+
+                const totalRevenue = weeklyInvoices.reduce((acc, curr) => acc + curr.price, 0);
+                const totalProfit = weeklyInvoices.reduce((acc, curr) => acc + curr.profit, 0);
+                const totalBonuses = weeklyInvoices.reduce((acc, curr) => acc + curr.bonus, 0);
+
+                // Use sortedEmployees instead of employees to maintain grade order
+                const employeeStats = sortedEmployees.map(emp => {
+                const empInvoices = weeklyInvoices.filter(inv => inv.employeeId === emp.id);
+                const revenue = empInvoices.reduce((acc, curr) => acc + curr.price, 0);
+                const bonusTheorique = empInvoices.reduce((acc, curr) => acc + curr.bonus, 0);
+                return { ...emp, invoiceCount: empInvoices.length, revenue, bonusTheorique };
+                });
+
+                const clientStats = {};
+                weeklyInvoices.forEach(inv => {
+                    if (!clientStats[inv.client]) clientStats[inv.client] = 0;
+                    clientStats[inv.client] += inv.price;
+                });
+                const topClients = Object.entries(clientStats)
+                    .map(([name, value]) => ({ name, value }))
+                    .sort((a, b) => b.value - a.value)
+                    .slice(0, 5);
+
+                const days = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+                const activityData = days.map((day, index) => {
+                    const dayIndex = (index + 1) % 7; 
+                    const val = weeklyInvoices.filter(i => new Date(i.date).getDay() === dayIndex).reduce((acc, curr) => acc + curr.price, 0);
+                    return { name: day, ca: val };
+                });
+
+                const serviceDist = weeklyInvoices.reduce((acc, inv) => {
+                    const type = inv.type === 'Réparation' ? 'Réparation' : 'Custom';
+                    if(!acc[type]) acc[type] = 0;
+                    acc[type] += inv.price;
+                    return acc;
+                }, {});
+                const pieData = Object.entries(serviceDist).map(([name, value]) => ({ name, value }));
+                
+                const weeklyLogs = serviceLogs.filter(log => {
+                    const logDate = new Date(log.start);
+                    return logDate >= start && logDate <= end;
+                });
+
+                return { totalRevenue, totalProfit, totalBonuses, employeeStats, topClients, activityData, pieData, weeklyInvoices, weeklyLogs };
+            }, [invoices, sortedEmployees, serviceLogs, selectedDate]);
+
+            const uniqueClients = useMemo(() => {
+                return [...new Set(invoices.map(inv => inv.client))];
+            }, [invoices]);
+
+            // --- Actions ---
+
+            const handlePrevWeek = () => {
+                const newDate = new Date(selectedDate);
+                newDate.setDate(newDate.getDate() - 7);
+                setSelectedDate(newDate);
+            };
+
+            const handleNextWeek = () => {
+                const newDate = new Date(selectedDate);
+                newDate.setDate(newDate.getDate() + 7);
+                setSelectedDate(newDate);
+            };
+
+            const handleLogin = async (e) => {
+                e.preventDefault();
+                
+                if (employees.length === 0) {
+                    setLoginError('Chargement des données... Veuillez patienter ou vérifier votre connexion.');
+                    return;
+                }
+
+                const user = employees.find(
+                    emp => emp.name.toLowerCase() === loginForm.username.toLowerCase() && emp.password === loginForm.password
+                );
+
+                if (user) {
+                    setCurrentUser(user);
+                    setDashboardTargetUser(user); 
+                    setLoginError('');
+                    
+                    // --- AUTO CLOCK-IN (Write to Firestore or Local) ---
+                    const logPayload = {
+                        employeeId: user.id,
+                        employeeName: user.name,
+                        start: new Date().toISOString(),
+                        end: null
+                    };
+
+                    if (isOffline) {
+                        setServiceLogs(prev => [...prev, { ...logPayload, id: Date.now() }]);
+                        showNotification(`Bienvenue ${user.name}. Prise de service enregistrée (Hors-ligne).`);
+                    } else {
+                        try {
+                            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'service_logs'), logPayload);
+                            showNotification(`Bienvenue ${user.name}. Prise de service enregistrée.`);
+                        } catch (err) {
+                            console.error("Log failed", err);
+                            // If write fails (permission denied), fallback to offline mode? 
+                            // Usually handled by snapshot listener error, but write might fail first.
+                            if (err.code === 'permission-denied') {
+                                setIsOffline(true);
+                                setNotification({ msg: "Erreur écriture (Permission). Mode hors-ligne activé.", type: 'warning' });
+                            }
+                        }
+                    }
+
+                    if (user.role === 'admin') setActiveTab('dashboard');
+                    else if (user.grade === 'Avocat') setActiveTab('hr'); 
+                    else setActiveTab('personal');
+                } else {
+                    setLoginError('Nom ou mot de passe incorrect');
+                }
+            };
+
+            const handleLogout = async () => {
+                // --- AUTO CLOCK-OUT (Update Firestore or Local) ---
+                if (currentUser) {
+                    // Find active log for this user
+                    const activeLog = serviceLogs.find(log => log.employeeId === currentUser.id && log.end === null);
+                    if (activeLog) {
+                        if (isOffline) {
+                            setServiceLogs(prev => prev.map(log => log.id === activeLog.id ? { ...log, end: new Date().toISOString() } : log));
+                        } else {
+                            try {
+                                const docRefId = activeLog.docId || activeLog.id;
+                                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'service_logs', docRefId), {
+                                    end: new Date().toISOString()
+                                });
+                            } catch (e) {
+                                console.log("Logout log update failed", e);
+                            }
+                        }
+                    }
+                }
+                setCurrentUser(null);
+                setDashboardTargetUser(null);
+                setLoginForm({ username: '', password: '' });
+            };
+
+            const showNotification = (msg, type = 'success') => {
+                setNotification({ msg, type });
+                setTimeout(() => setNotification(null), 3000);
+            };
+
+            const handleSubmitApplication = async () => {
+                if(!applicationForm.name) { showNotification("Veuillez remplir tous les champs", 'error'); return; }
+                const newApp = { ...applicationForm, date: new Date().toISOString() };
+                
+                if (isOffline) {
+                    setApplications(prev => [...prev, { ...newApp, id: `app${Date.now()}` }]);
+                } else {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'applications'), newApp);
+                }
+                setApplicationForm({ name: '', dob: '', motivation: '', ageHRP: '', availability: '', phoneRP: '', discord: '' });
+                setAuthMode('login');
+                showNotification("Votre candidature a été envoyée !", "success");
+            };
+
+            const handleAcceptApplication = async (app) => {
+                const id = `e${Date.now().toString().slice(-4)}`;
+                const newEmp = { id, name: app.name, grade: 'Apprenti', role: 'user', password: '123', dob: app.dob, contractUrl: '', iban: '' };
+                
+                if (isOffline) {
+                    setEmployees(prev => [...prev, newEmp]);
+                    setApplications(prev => prev.filter(a => a.id !== app.id));
+                } else {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), newEmp);
+                    const docRefId = app.docId || app.id;
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'applications', docRefId));
+                }
+                showNotification(`${app.name} a été recruté comme Apprenti !`);
+            };
+
+            const handleRejectApplication = async (id) => {
+                if (isOffline) {
+                    setApplications(prev => prev.filter(a => a.id !== id));
+                } else {
+                    const app = applications.find(a => a.id === id);
+                    const docRefId = app?.docId || id;
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'applications', docRefId));
+                }
+                showNotification("Candidature refusée.");
+            };
+
+            const calculateInvoiceMetrics = (type, price) => {
+                const p = parseFloat(price) || 0;
+                let costPercent = 0;
+                if (type === 'Réparation') costPercent = config.repairCostPercent; 
+                else if (type === 'Custom') costPercent = config.customCostPercent; 
+                else costPercent = config.customCostPercent; 
+                const totalCost = p * (costPercent / 100);
+                const netProfit = p - totalCost;
+                return { totalCost, netProfit };
+            };
+
+            const handleCreateInvoice = async () => {
+                if (!newInvoice.client || !newInvoice.type || !newInvoice.price) {
+                    showNotification("Veuillez remplir les champs obligatoires", 'error');
+                    return;
+                }
+                const price = parseFloat(newInvoice.price);
+                const metrics = calculateInvoiceMetrics(newInvoice.type, price);
+                const gradeInfo = grades.find(g => g.name === currentUser.grade);
+                const bonus = (metrics.netProfit > 0 && gradeInfo) ? (metrics.netProfit * gradeInfo.primePercent / 100) : 0;
+
+                const invoiceEntry = {
+                    date: new Date().toISOString(),
+                    client: newInvoice.client,
+                    type: newInvoice.type,
+                    price: price,
+                    profit: metrics.netProfit,
+                    bonus: bonus,
+                    employeeId: currentUser.id,
+                    employeeName: currentUser.name
+                };
+                
+                if (isOffline) {
+                    setInvoices(prev => [{ ...invoiceEntry, id: Date.now() }, ...prev]);
+                } else {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'invoices'), invoiceEntry);
+                }
+                setNewInvoice({ client: '', type: '', price: '' }); 
+                showNotification("Facture enregistrée !");
+            };
+
+            const handleDeleteInvoice = async (id) => {
+                if (window.confirm("Supprimer cette facture ?")) {
+                    if (isOffline) {
+                        setInvoices(prev => prev.filter(inv => inv.id !== id));
+                    } else {
+                        const inv = invoices.find(i => i.id === id);
+                        const docRefId = inv?.docId || id;
+                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'invoices', docRefId));
+                    }
+                    showNotification("Facture supprimée");
+                }
+            };
+
+            const handleAddEmployee = async () => {
+                if (!newEmployee.name || !newEmployee.grade) return;
+                const id = `e${Date.now().toString().slice(-4)}`;
+                const newEmp = {
+                    id, name: newEmployee.name, grade: newEmployee.grade, role: 'user', password: '123',
+                    dob: newEmployee.dob, contractUrl: newEmployee.contractUrl, iban: newEmployee.iban
+                };
+                if (isOffline) {
+                    setEmployees(prev => [...prev, newEmp]);
+                } else {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'employees'), newEmp);
+                }
+                setNewEmployee({ name: '', grade: '', dob: '', contractUrl: '', iban: '' });
+                showNotification(`Employé ajouté.`);
+            };
+
+            // FIX: Using docId for deletion
+            const handleFireEmployee = async (idToDelete) => {
+                if (isOffline) {
+                    setEmployees(prev => prev.filter(e => e.id !== idToDelete));
+                } else {
+                    const emp = employees.find(e => e.id === idToDelete);
+                    if (!emp) return;
+                    const docRefId = emp.docId || idToDelete;
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', docRefId));
+                }
+                showNotification("L'employé a été licencié et ses accès révoqués.", "success");
+            };
+
+            // FIX: Using docId for update
+            const handleSaveEdit = async () => {
+                if (isOffline) {
+                    setEmployees(prev => prev.map(emp => emp.id === editingEmployee.id ? editingEmployee : emp));
+                } else {
+                    // Extract docId to use as ref, but also keep it out of data if desired, 
+                    // though usually storing it back is harmless.
+                    const docRefId = editingEmployee.docId || editingEmployee.id;
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', docRefId), editingEmployee);
+                }
+                setEditingEmployee(null);
+                showNotification("Informations mises à jour !");
+            };
+
+            const handleUpdateGrade = async (gradeId, field, value) => {
+                const newGrades = grades.map(g => g.id === gradeId ? { ...g, [field]: value } : g);
+                if (isOffline) {
+                    setGrades(newGrades);
+                } else {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'grades'), { list: newGrades });
+                }
+            };
+
+            const handlePriceChange = async (categoryIndex, itemIndex, field, value) => {
+                const newPrices = prices.map((cat, i) => {
+                    if (i === categoryIndex) {
+                        return {
+                            ...cat,
+                            items: cat.items.map((item, j) => j === itemIndex ? { ...item, [field]: value } : item)
+                        };
+                    }
+                    return cat;
+                });
+                setPrices(newPrices);
+                if (!isOffline) {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'prices'), { list: newPrices });
+                }
+            };
+            
+            const handleAddItem = async (categoryIndex) => {
+                const newPrices = prices.map((cat, i) => {
+                    if (i === categoryIndex) return { ...cat, items: [...cat.items, { name: 'Nouvelle pièce', price: 0 }] };
+                    return cat;
+                });
+                setPrices(newPrices);
+                if (!isOffline) {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'prices'), { list: newPrices });
+                }
+            };
+
+            const handleDeleteItem = async (categoryIndex, itemIndex) => {
+                const newPrices = prices.map((cat, i) => {
+                    if (i === categoryIndex) return { ...cat, items: cat.items.filter((_, j) => j !== itemIndex) };
+                    return cat;
+                });
+                setPrices(newPrices);
+                if (!isOffline) {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'prices'), { list: newPrices });
+                }
+            };
+
+            // --- Contracts Logic ---
+            const handleAddTempDoc = () => {
+                if(tempDoc.name && tempDoc.url) {
+                    setNewContract({ ...newContract, supplementaryDocs: [...newContract.supplementaryDocs, tempDoc] });
+                    setTempDoc({ name: '', url: '' });
+                }
+            };
+
+            const handleSaveContract = async () => {
+                if (!newContract.company || !newContract.date) return;
+                
+                if (editingContractId) {
+                    if (isOffline) {
+                        setContracts(prev => prev.map(c => c.id === editingContractId ? { ...newContract, id: editingContractId } : c));
+                    } else {
+                        const contract = contracts.find(c => c.id === editingContractId);
+                        const docRefId = contract?.docId || editingContractId;
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'contracts', docRefId), newContract);
+                    }
+                    setEditingContractId(null);
+                    showNotification("Contrat modifié avec succès.");
+                } else {
+                    if (isOffline) {
+                        setContracts(prev => [...prev, { ...newContract, id: `c${Date.now()}` }]);
+                    } else {
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'contracts'), newContract);
+                    }
+                    showNotification("Contrat ajouté avec succès.");
+                }
+                setNewContract({ company: '', date: '', endDate: '', description: '', url: '', supplementaryDocs: [] });
+            };
+
+            const handleEditContractClick = (contract) => {
+                setNewContract({
+                    company: contract.company,
+                    date: contract.date,
+                    endDate: contract.endDate || '',
+                    description: contract.description,
+                    url: contract.url,
+                    supplementaryDocs: contract.supplementaryDocs || []
+                });
+                setEditingContractId(contract.id);
+            };
+
+            const handleCancelContractEdit = () => {
+                setEditingContractId(null);
+                setNewContract({ company: '', date: '', endDate: '', description: '', url: '', supplementaryDocs: [] });
+            }
+
+            const handleDeleteContract = async (id) => {
+                if (deleteConfirmId === id) {
+                    if (isOffline) {
+                        setContracts(prev => prev.filter(c => c.id !== id));
+                    } else {
+                        const contract = contracts.find(c => c.id === id);
+                        const docRefId = contract?.docId || id;
+                        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'contracts', docRefId));
+                    }
+                    showNotification("Contrat supprimé.");
+                    setDeleteConfirmId(null);
+                } else {
+                    setDeleteConfirmId(id);
+                    setTimeout(() => setDeleteConfirmId(prev => prev === id ? null : prev), 3000); 
+                }
+            };
+
+            const handleCopyText = (text) => {
+                navigator.clipboard.writeText(text);
+                showNotification("Message copié !", "success");
+            }
+
+            // --- SETTINGS SAVE ---
+            const saveCustomMessages = async () => {
+                if (isOffline) {
+                    setCustomMessages({...customMessages});
+                } else {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'messages'), customMessages);
+                }
+                setIsEditingMessages(false);
+                showNotification("Messages sauvegardés.");
+            }
+
+            const saveConfig = async (key, val) => {
+                const newConf = { ...config, [key]: val };
+                setConfig(newConf); // Optimistic
+                if (!isOffline) {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), newConf);
+                }
+            }
+            
+            // --- RESET LOGIC ---
+            const handleResetStats = async () => {
+                if (isOffline) {
+                    setInvoices([]);
+                    setServiceLogs([]);
+                    // Also clear local storage for these keys
+                    localStorage.removeItem('southside_invoices');
+                    localStorage.removeItem('southside_serviceLogs');
+                } else {
+                    const invoicesQ = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'invoices'));
+                    const logsQ = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'service_logs'));
+                    const batch = writeBatch(db);
+                    invoicesQ.forEach(d => batch.delete(d.ref));
+                    logsQ.forEach(d => batch.delete(d.ref));
+                    await batch.commit();
+                }
+                setConfirmReset(false);
+                showNotification("Toutes les statistiques ont été remises à zéro.", "success");
+            };
+
+            // --- Navigation ---
+            const handleNavClick = (tabId) => {
+                setActiveTab(tabId);
+                if (tabId === 'personal' && dashboardTargetUser?.id !== currentUser?.id) {
+                    setDashboardTargetUser(currentUser);
+                }
+                if (window.innerWidth < 1024) setIsSidebarOpen(false);
+            };
+
+            const handleViewEmployeeStats = (employee) => {
+                setDashboardTargetUser(employee);
+                setActiveTab('personal');
+            };
+            
+            // Helper to get grade color
+            const getGradeColor = (grade) => {
+                const lowerGrade = grade?.toLowerCase() || '';
+                if (lowerGrade.includes('patron') && !lowerGrade.includes('co')) return 'red';
+                if (lowerGrade.includes('co-patron')) return 'amber';
+                if (lowerGrade.includes('avocat')) return 'purple';
+                if (lowerGrade.includes('chef')) return 'blue';
+                if (lowerGrade.includes('mécano')) return 'green';
+                return 'gray';
+            };
+
+            // --- RENDERERS ---
+
+            const renderAuthScreen = (
+                <div className="min-h-screen bg-[#050505] text-gray-200 font-sans flex items-center justify-center p-4">
+                    <div className="absolute top-0 left-0 w-full h-96 bg-indigo-900/20 blur-[120px] pointer-events-none"></div>
+                    <div className="absolute bottom-0 right-0 w-96 h-96 bg-violet-900/10 blur-[100px] pointer-events-none"></div>
+
+                    <GlassCard className="w-full max-w-md p-8 relative overflow-hidden animate-fadeIn">
+                        <div className="text-center mb-8">
+                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 mx-auto mb-4">
+                                <Wallet size={32} />
+                            </div>
+                            <h1 className="text-2xl font-black text-white tracking-tight">Southside <span className="text-indigo-500">Manager</span></h1>
+                            <p className="text-sm text-gray-500 mt-2">Enterprise Resource Planning</p>
+                        </div>
+
+                        {authMode === 'login' ? (
+                            <>
+                                <form onSubmit={handleLogin} className="space-y-6">
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider ml-1 mb-2 block">Identifiant</label>
+                                            <div className="relative group">
+                                                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
+                                                <input type="text" placeholder="Nom et Prénom (ex: Edy Thomas)" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} className="w-full bg-black/40 border border-gray-700 rounded-xl py-3 pl-12 pr-4 text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all" />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider ml-1 mb-2 block">Mot de passe</label>
+                                            <div className="relative group">
+                                                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 w-5 h-5" />
+                                                <input type="password" placeholder="Code d'accès" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} className="w-full bg-black/40 border border-gray-700 rounded-xl py-3 pl-12 pr-4 text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {loginError && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-red-400 text-sm"><AlertCircle size={16} />{loginError}</div>}
+                                    <Button type="submit" className="w-full py-4 text-lg">Se connecter</Button>
+                                </form>
+                                <div className="mt-6 text-center border-t border-gray-800 pt-4">
+                                    <button onClick={() => setAuthMode('apply')} className="text-indigo-400 hover:text-white text-sm font-bold transition-colors">
+                                        Candidature Spontanée (Postuler)
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="space-y-6 animate-fadeIn">
+                                <div>
+                                    <button onClick={() => setAuthMode('login')} className="flex items-center gap-2 text-gray-500 hover:text-white mb-4 text-sm"><ChevronLeft size={16}/> Retour connexion</button>
+                                    <h3 className="text-xl font-bold text-white mb-2">Rejoindre l'équipe</h3>
+                                    <p className="text-sm text-gray-400">Remplissez ce formulaire pour envoyer votre dossier au patron.</p>
+                                </div>
+                                <div className="space-y-4">
+                                    <Input label="Nom et Prénom" placeholder="Ex: John Doe" value={applicationForm.name} onChange={(e) => setApplicationForm({...applicationForm, name: e.target.value})} />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Input label="Date de naissance (RP)" type="date" value={applicationForm.dob} onChange={(e) => setApplicationForm({...applicationForm, dob: e.target.value})} />
+                                        <Input label="Age HRP" type="number" placeholder="Ex: 20" value={applicationForm.ageHRP} onChange={(e) => setApplicationForm({...applicationForm, ageHRP: e.target.value})} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Input label="Numéro Tél RP" placeholder="Ex: 555-1234" value={applicationForm.phoneRP} onChange={(e) => setApplicationForm({...applicationForm, phoneRP: e.target.value})} />
+                                        <Input label="Pseudo Discord" placeholder="Ex: user#1234" value={applicationForm.discord} onChange={(e) => setApplicationForm({...applicationForm, discord: e.target.value})} />
+                                    </div>
+                                    <Input label="Disponibilités" placeholder="Ex: Soirs semaine, Week-end..." value={applicationForm.availability} onChange={(e) => setApplicationForm({...applicationForm, availability: e.target.value})} />
+                                    <div>
+                                        <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider ml-1 mb-2 block">Motivation</label>
+                                        <textarea 
+                                            className="w-full bg-black/40 border border-gray-700 rounded-xl py-3 px-4 text-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all h-24"
+                                            placeholder="Pourquoi voulez-vous nous rejoindre ?"
+                                            value={applicationForm.motivation}
+                                            onChange={(e) => setApplicationForm({...applicationForm, motivation: e.target.value})}
+                                        ></textarea>
+                                    </div>
+                                </div>
+                                <Button onClick={handleSubmitApplication} className="w-full py-3" variant="success"><Send size={18}/> Envoyer ma candidature</Button>
+                            </div>
+                        )}
+                        {/* NOTIFICATION DANS LE LOGIN SCREEN */}
+                        {notification && <div className={`fixed bottom-8 right-8 z-50 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-slideUp backdrop-blur-xl border border-white/10 ${notification.type === 'error' ? 'bg-red-500/20 text-red-200' : 'bg-emerald-500/20 text-emerald-200'}`}><div><p className="font-bold text-white">{notification.type === 'error' ? 'Erreur' : 'Succès'}</p><p className="text-sm opacity-80">{notification.msg}</p></div></div>}
+                    </GlassCard>
+                </div>
+            );
+
+            const renderPersonalDashboard = () => {
+                const targetUser = dashboardTargetUser || currentUser;
+                const isViewingSelf = targetUser.id === currentUser.id;
+
+                const myInvoices = weeklyStats.weeklyInvoices.filter(inv => inv.employeeId === targetUser.id);
+                const myRevenue = myInvoices.reduce((acc, curr) => acc + curr.price, 0);
+                const myBonusTheorique = myInvoices.reduce((acc, curr) => acc + curr.bonus, 0);
+                const gradeInfo = grades.find(g => g.name === targetUser.grade);
+                const quota = gradeInfo ? gradeInfo.quota : 25;
+                const invoiceCount = myInvoices.length;
+                const progress = quota > 0 ? Math.min((invoiceCount / quota) * 100, 100) : 100;
+                const isComplete = progress >= 100;
+                const maxSalary = gradeInfo ? gradeInfo.maxSalary : 0;
+                const earnedSalary = maxSalary * (progress / 100);
+                const myActivityData = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((day, index) => {
+                    const val = myInvoices.filter(i => new Date(i.date).getDay() === (index + 1) % 7).reduce((acc, curr) => acc + curr.price, 0);
+                    return { name: day, ca: val };
+                });
+
+                const myLogs = weeklyStats.weeklyLogs.filter(log => log.employeeId === targetUser.id);
+                let totalHours = 0;
+                myLogs.forEach(log => {
+                    totalHours += getDurationInHours(log.start, log.end);
+                });
+
+                return (
+                    <div className="animate-fadeIn space-y-8">
+                        <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} />
+                        <div className="flex justify-between items-end">
+                            <div>
+                                <h2 className="text-3xl font-black text-white tracking-tight flex items-center gap-3">
+                                    {isViewingSelf ? `Bonjour, ${targetUser.name.split(' ')[0]} 👋` : `Fiche de ${targetUser.name}`}
+                                    {!isViewingSelf && <span className="text-sm bg-indigo-500/20 text-indigo-400 px-2 py-1 rounded border border-indigo-500/30">Mode Supervision</span>}
+                                </h2>
+                                <p className="text-gray-400">Performances pour la semaine sélectionnée.</p>
+                            </div>
+                            <div className="text-right">
+                                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Grade Actuel</div>
+                                <StatusBadge color={getGradeColor(targetUser.grade)}>{targetUser.grade}</StatusBadge>
+                            </div>
+                        </div>
+                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            <GlassCard className="p-6 relative overflow-hidden">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Objectif Hebdo</h3>
+                                        <div className="flex items-baseline gap-1 mt-1">
+                                            <span className={`text-3xl font-black ${isComplete ? 'text-emerald-400' : 'text-white'}`}>{invoiceCount}</span>
+                                            {quota > 0 && <span className="text-gray-500">/ {quota} factures</span>}
+                                        </div>
+                                    </div>
+                                    <div className={`p-2 rounded-lg ${isComplete ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                                        <Target size={24} />
+                                    </div>
+                                </div>
+                                {quota > 0 && (
+                                    <>
+                                        <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
+                                            <div className={`h-full transition-all duration-1000 ${isComplete ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${progress}%`}}></div>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-2 text-right">{Math.round(progress)}% complété</p>
+                                    </>
+                                )}
+                            </GlassCard>
+                            <GlassCard className="p-6">
+                                <div className="flex justify-between items-start mb-2">
+                                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Heures Service</h3>
+                                    <div className="p-2 bg-pink-500/20 text-pink-400 rounded-lg">
+                                        <Clock size={24} />
+                                    </div>
+                                </div>
+                                <p className="text-3xl font-black text-white">{totalHours.toFixed(1)}h</p>
+                                <p className="text-xs text-gray-500 mt-1">Sur la semaine</p>
+                            </GlassCard>
+                            <GlassCard className="p-6">
+                                <div className="flex justify-between items-start mb-2">
+                                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Chiffre d'Affaires</h3>
+                                    <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-lg">
+                                        <Activity size={24} />
+                                    </div>
+                                </div>
+                                <p className="text-3xl font-black text-white">${myRevenue.toLocaleString()}</p>
+                                <p className="text-xs text-gray-500 mt-1">Généré pour l'entreprise</p>
+                            </GlassCard>
+                             <GlassCard className={`p-6 border-l-4 ${isComplete ? 'border-l-emerald-500' : 'border-l-amber-500'}`}>
+                                <div className="flex justify-between items-start mb-2">
+                                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Paie Estimée</h3>
+                                    <div className={`p-2 rounded-lg ${isComplete ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                                        {isComplete ? <Unlock size={24} /> : <Lock size={24} />}
+                                    </div>
+                                </div>
+                                <p className="text-3xl font-black text-white">${(earnedSalary + (isComplete ? myBonusTheorique : 0)).toLocaleString()}</p>
+                                {!isComplete && (
+                                    <div className="mt-2 flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 px-2 py-1 rounded">
+                                        <Lock size={12} /><span>Prime de ${myBonusTheorique} bloquée</span>
+                                    </div>
+                                )}
+                                {isComplete && (
+                                    <div className="mt-2 flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">
+                                        <CheckCircle size={12} /><span>Prime débloquée !</span>
+                                    </div>
+                                )}
+                            </GlassCard>
+                        </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                            <div className="lg:col-span-2">
+                                <GlassCard className="h-full flex flex-col">
+                                    <div className="p-6 border-b border-gray-700/50">
+                                        <h3 className="font-bold text-white">Factures de la semaine</h3>
+                                    </div>
+                                    <div className="flex-1 overflow-auto custom-scrollbar p-0">
+                                        <table className="w-full text-left">
+                                            <thead className="bg-gray-900/50 text-xs text-gray-500 uppercase sticky top-0">
+                                                <tr>
+                                                    <th className="p-4">Date</th>
+                                                    <th className="p-4">Client</th>
+                                                    <th className="p-4">Type</th>
+                                                    <th className="p-4 text-right">Montant</th>
+                                                    <th className="p-4 text-right">Ma Prime</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-800">
+                                                {myInvoices.map(inv => (
+                                                    <tr key={inv.id} className="hover:bg-white/5">
+                                                        <td className="p-4 text-gray-400 text-xs">{new Date(inv.date).toLocaleDateString()}</td>
+                                                        <td className="p-4 font-medium text-white">{inv.client}</td>
+                                                        <td className="p-4"><StatusBadge color="gray">{inv.type}</StatusBadge></td>
+                                                        <td className="p-4 text-right font-mono text-gray-300">${inv.price}</td>
+                                                        <td className="p-4 text-right font-mono text-emerald-400">+${inv.bonus}</td>
+                                                    </tr>
+                                                ))}
+                                                {myInvoices.length === 0 && (
+                                                    <tr><td colSpan="5" className="p-6 text-center text-gray-500">Aucune facture cette semaine</td></tr>
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </GlassCard>
+                            </div>
+                            <GlassCard className="p-6 flex flex-col justify-center">
+                                <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-4">Activité Hebdo</h3>
+                                <div className="h-48 w-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={myActivityData}>
+                                            <Tooltip cursor={{fill: 'transparent'}} contentStyle={{backgroundColor:'#111827', borderColor:'#374151', color:'#fff', borderRadius:'8px'}} />
+                                            <Bar dataKey="ca" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </GlassCard>
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderPlanning = () => {
+                const start = getStartOfWeek(selectedDate);
+                const days = Array.from({length: 7}, (_, i) => {
+                    const d = new Date(start);
+                    d.setDate(d.getDate() + i);
+                    return d;
+                });
+
+                const getLogsForDay = (date) => {
+                    return weeklyStats.weeklyLogs.filter(log => {
+                        const logDate = new Date(log.start);
+                        return logDate.toDateString() === date.toDateString();
+                    });
+                };
+
+                return (
+                    <div className="animate-fadeIn h-full flex flex-col">
+                        <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} />
+                        <div className="mb-6"><h2 className="text-3xl font-black text-white">Planning & Services</h2><p className="text-gray-400">Vue d'ensemble des prises de service de l'équipe.</p></div>
+                        <GlassCard className="flex-1 overflow-hidden flex flex-col">
+                             <div className="flex-1 overflow-auto custom-scrollbar p-6">
+                                <div className="grid grid-cols-7 gap-4 min-w-[1000px]">
+                                    {days.map((day, idx) => {
+                                        const dayLogs = getLogsForDay(day);
+                                        const totalHoursDay = dayLogs.reduce((acc, log) => acc + getDurationInHours(log.start, log.end), 0);
+                                        return (
+                                            <div key={idx} className="flex flex-col gap-3">
+                                                <div className="text-center p-3 bg-gray-800/50 rounded-xl border border-gray-700/50">
+                                                    <div className="text-indigo-400 font-bold uppercase text-xs">{day.toLocaleDateString('fr-FR', { weekday: 'short' })}</div>
+                                                    <div className="text-white font-black text-xl">{day.getDate()}</div>
+                                                    {totalHoursDay > 0 && <div className="mt-1 text-[10px] bg-indigo-500/20 text-indigo-300 rounded px-2 py-0.5">{totalHoursDay.toFixed(1)}h total</div>}
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {dayLogs.map(log => {
+                                                        const duration = getDurationInHours(log.start, log.end);
+                                                        const isFinished = !!log.end;
+                                                        return (
+                                                            <div key={log.id} className={`p-2 rounded-lg border text-xs ${isFinished ? 'bg-gray-800/30 border-gray-700 text-gray-400' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200 animate-pulse'}`}>
+                                                                <div className="font-bold truncate">{log.employeeName}</div>
+                                                                <div className="flex justify-between mt-1 opacity-70 font-mono">
+                                                                    <span>{new Date(log.start).toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'})}</span>
+                                                                    <span>{isFinished ? new Date(log.end).toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'}) : '...'}</span>
+                                                                </div>
+                                                                <div className="mt-1 text-right font-bold opacity-50">{duration.toFixed(1)}h</div>
+                                                            </div>
+                                                        )
+                                                    })}
+                                                    {dayLogs.length === 0 && <div className="text-center text-gray-600 text-xs py-4 italic">-</div>}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                             </div>
+                        </GlassCard>
+                    </div>
+                );
+            };
+
+            const renderDashboard = () => (
+                 <div className="animate-fadeIn space-y-8">
+                    <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} />
+                    <div>
+                        <h2 className="text-3xl font-black text-white tracking-tight">Dashboard</h2>
+                        <p className="text-gray-400">Vue d'ensemble de la semaine sélectionnée.</p>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <GlassCard className="p-6 border-t-4 border-t-indigo-500 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-5"><Activity size={80}/></div>
+                            <h3 className="text-indigo-300 font-bold text-sm uppercase mb-2">Chiffre d'Affaires</h3>
+                            <p className="text-4xl font-black text-white">${weeklyStats.totalRevenue.toLocaleString()}</p>
+                        </GlassCard>
+                        <GlassCard className="p-6 border-t-4 border-t-emerald-500 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-4 opacity-5"><TrendingUp size={80}/></div>
+                            <h3 className="text-emerald-300 font-bold text-sm uppercase mb-2">Bénéfice Net</h3>
+                            <p className="text-4xl font-black text-white">${weeklyStats.totalProfit.toLocaleString()}</p>
+                        </GlassCard>
+                        <GlassCard className="p-6 border-t-4 border-t-violet-500 relative overflow-hidden">
+                             <div className="absolute top-0 right-0 p-4 opacity-5"><Award size={80}/></div>
+                            <h3 className="text-violet-300 font-bold text-sm uppercase mb-2">Total Primes</h3>
+                            <p className="text-4xl font-black text-white">${weeklyStats.totalBonuses.toLocaleString()}</p>
+                        </GlassCard>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                        <GlassCard className="p-6">
+                            <h3 className="text-white font-bold mb-6 flex items-center gap-2">
+                                <TrendingUp size={18} className="text-indigo-400"/> Revenus Hebdomadaires
+                            </h3>
+                            <div className="h-64">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <AreaChart data={weeklyStats.activityData}>
+                                        <defs>
+                                            <linearGradient id="colorCa" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                                                <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                                        <XAxis dataKey="name" stroke="#9ca3af" axisLine={false} tickLine={false} />
+                                        <YAxis stroke="#9ca3af" axisLine={false} tickLine={false} />
+                                        <Tooltip contentStyle={{backgroundColor:'#111827', borderColor:'#374151', color:'#fff', borderRadius:'8px'}} />
+                                        <Area type="monotone" dataKey="ca" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorCa)" />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </GlassCard>
+                        <GlassCard className="p-6">
+                             <h3 className="text-white font-bold mb-6 flex items-center gap-2">
+                                <PieIcon size={18} className="text-emerald-400"/> Répartition CA (Réparation vs Custom)
+                            </h3>
+                             <div className="h-64 flex items-center justify-center">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie data={weeklyStats.pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                                            {weeklyStats.pieData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.name === 'Réparation' ? '#10b981' : '#f59e0b'} stroke="none" />
+                                            ))}
+                                        </Pie>
+                                        <Tooltip contentStyle={{backgroundColor:'#111827', borderColor:'#374151', color:'#fff', borderRadius:'8px'}} />
+                                        <Legend />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </GlassCard>
+                    </div>
+                 </div>
+            );
+            
+            const renderInvoiceForm = () => {
+                const metrics = calculateInvoiceMetrics(newInvoice.type, newInvoice.price);
+                return (
+                <div className="max-w-6xl mx-auto animate-fadeIn">
+                  <div className="flex flex-col md:flex-row justify-between items-end mb-8">
+                    <div>
+                      <h2 className="text-3xl font-black text-white mb-2 tracking-tight">Nouvelle Facture</h2>
+                      <p className="text-gray-400">Saisie simplifiée. Connecté en tant que <strong className="text-indigo-400">{currentUser.name}</strong>.</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-2">
+                        <GlassCard className="p-8 relative overflow-hidden h-full">
+                            <div className="absolute -top-20 -right-20 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                            <div className="grid grid-cols-1 gap-6 relative z-10">
+                                <div>
+                                    <Input label="Client" required placeholder="Rechercher..." list="client-suggestions" value={newInvoice.client} onChange={(e) => setNewInvoice({...newInvoice, client: e.target.value})} />
+                                    <datalist id="client-suggestions">{uniqueClients.map((client, idx) => (<option key={idx} value={client} />))}</datalist>
+                                </div>
+                                <Select label="Type de Prestation" required options={SERVICE_TYPES} value={newInvoice.type} onChange={(e) => setNewInvoice({...newInvoice, type: e.target.value})} />
+                                <Input label="Prix Facturé ($)" required type="number" prefix="$" placeholder="0.00" value={newInvoice.price} onChange={(e) => setNewInvoice({...newInvoice, price: e.target.value})} />
+                            </div>
+                            <div className="mt-8">
+                                <Button onClick={handleCreateInvoice} className="w-full py-4 text-lg shadow-indigo-500/25"><Save size={20} /> Enregistrer la facture</Button>
+                            </div>
+                        </GlassCard>
+                    </div>
+                    <div className="lg:col-span-1 space-y-6">
+                        <GlassCard className="p-6 bg-gradient-to-br from-gray-900 to-gray-800">
+                            <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                                <Calculator size={16} /> Estimation Rapide
+                            </h3>
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center pb-2 border-b border-gray-700/50">
+                                    <span className="text-gray-400">Prix Facturé</span>
+                                    <span className="font-mono text-white">${parseFloat(newInvoice.price || 0).toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm">
+                                    <span className="text-gray-500">
+                                        {newInvoice.type === 'Réparation' ? 'Coût Fixe' : 'Frais Custom'}
+                                    </span>
+                                    <span className="font-mono text-red-400/70">-${calculateInvoiceMetrics(newInvoice.type, newInvoice.price).totalCost.toFixed(2)}</span>
+                                </div>
+                                <div className="pt-2">
+                                    <div className="flex justify-between items-center">
+                                        <span className="font-bold text-white">Bénéfice Net</span>
+                                        <span className={`font-mono font-bold text-xl ${metrics.netProfit >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
+                                            {metrics.netProfit >= 0 ? '+' : ''}{metrics.netProfit.toFixed(2)} $
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </GlassCard>
+                        <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-sm text-indigo-200">
+                            {newInvoice.type === 'Réparation' 
+                                ? <p>La politique entreprise fixe le coût des réparations à <strong>50%</strong> du prix facturé.</p>
+                                : <p>Pour les Customs, un taux de <strong>{config.customCostPercent}%</strong> de frais est appliqué.</p>
+                            }
+                        </div>
+                    </div>
+                  </div>
+                </div>
+                );
+            };
+
+            const renderHistory = () => {
+                const filteredInvoices = invoices.filter(inv => {
+                  const matchesSearch = inv.client.toLowerCase().includes(historySearch.toLowerCase());
+                  const matchesType = historyFilter ? inv.type === historyFilter : true;
+                  return matchesSearch && matchesType;
+                });
+
+                const weeklyFilteredInvoices = weeklyStats.weeklyInvoices.filter(inv => {
+                    const matchesSearch = inv.client.toLowerCase().includes(historySearch.toLowerCase());
+                    const matchesType = historyFilter ? inv.type === historyFilter : true;
+                    return matchesSearch && matchesType;
+                });
+
+                return (
+                <div className="animate-fadeIn h-full flex flex-col">
+                  <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} />
+                  <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
+                    <div>
+                      <h2 className="text-3xl font-black text-white tracking-tight">Historique Hebdomadaire</h2>
+                      <p className="text-gray-400">Archives de la semaine sélectionnée ({weeklyFilteredInvoices.length} factures)</p>
+                    </div>
+                    <div className="flex gap-2 w-full md:w-auto">
+                         <div className="relative group flex-1 md:w-64">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4 group-focus-within:text-indigo-400 transition-colors" />
+                            <input 
+                              type="text" 
+                              placeholder="Rechercher un client..." 
+                              value={historySearch}
+                              onChange={(e) => setHistorySearch(e.target.value)}
+                              className="w-full bg-black/40 border border-gray-700 rounded-xl py-2 pl-10 pr-4 text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 outline-none transition-all placeholder-gray-600"
+                            />
+                         </div>
+                         <div className="relative group w-40">
+                            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
+                            <select value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value)} className="w-full bg-black/40 border border-gray-700 rounded-xl py-2 pl-9 pr-8 text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 appearance-none outline-none transition-all cursor-pointer">
+                              <option value="">Tout voir</option>
+                              {SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                            </select>
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500"><ChevronRight className="w-3 h-3 rotate-90" /></div>
+                         </div>
+                         <Button variant="secondary" className="bg-gray-800/50 px-3"><FileText size={16} /></Button>
+                    </div>
+                  </div>
+                  <GlassCard className="flex-1 overflow-hidden flex flex-col">
+                    <div className="overflow-auto custom-scrollbar flex-1">
+                      <table className="w-full text-left border-collapse">
+                        <thead className="sticky top-0 bg-gray-900/95 backdrop-blur-md z-10">
+                          <tr className="text-indigo-300 text-xs uppercase tracking-wider border-b border-gray-800">
+                            <th className="p-5 font-bold">Date</th>
+                            <th className="p-5 font-bold">Client</th>
+                            <th className="p-5 font-bold">Type</th>
+                            <th className="p-5 font-bold text-right">Prix</th>
+                            {isBoss && <th className="p-5 font-bold text-right">Bénéfice Net</th>}
+                            <th className="p-5 font-bold">Employé</th>
+                            {isBoss && <th className="p-5 font-bold text-center">Action</th>}
+                            <th className="p-5 font-bold text-center">Reçu</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800/50">
+                          {weeklyFilteredInvoices.map((inv) => (
+                            <tr key={inv.id} className="hover:bg-indigo-500/5 transition-colors group">
+                              <td className="p-5 text-gray-300 text-sm">{new Date(inv.date).toLocaleDateString()}</td>
+                              <td className="p-5 font-medium text-white">{inv.client}</td>
+                              <td className="p-5"><StatusBadge color="gray">{inv.type}</StatusBadge></td>
+                              <td className="p-5 text-right font-mono text-gray-200 font-bold">${inv.price.toFixed(2)}</td>
+                              {isBoss && (
+                                  <td className={`p-5 text-right font-mono font-bold ${inv.profit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{inv.profit >= 0 ? '+' : ''}${inv.profit.toFixed(2)}</td>
+                              )}
+                              <td className="p-5 text-sm text-gray-400">{inv.employeeName}</td>
+                              {isBoss && (
+                                <td className="p-5 text-center">
+                                  <button onClick={() => handleDeleteInvoice(inv.id)} className="p-2 rounded-lg hover:bg-red-500/10 text-gray-600 hover:text-red-500 transition-all"><Trash2 size={16} /></button>
+                                </td>
+                              )}
+                              <td className="p-5 text-center">
+                                  <button onClick={() => generateInvoicePDF(inv)} className="p-2 bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-all" title="Télécharger PDF">
+                                      <Download size={16}/>
+                                  </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </GlassCard>
+                </div>
+                );
+            };
+
+            const renderPrices = () => (
+                 <div className="animate-fadeIn max-w-5xl mx-auto">
+                    <div className="mb-8 flex justify-between items-center">
+                        <div>
+                          <h2 className="text-3xl font-black text-white tracking-tight">Tarifs Garage</h2>
+                          <p className="text-gray-400">Liste officielle des prestations.</p>
+                        </div>
+                        {isBoss && (
+                            <button onClick={() => {
+                                if (isEditingPrices) {
+                                    setIsEditingPrices(false);
+                                } else {
+                                    setIsEditingPrices(true);
+                                }
+                            }} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${isEditingPrices ? 'bg-emerald-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
+                                {isEditingPrices ? <span className="flex items-center gap-2"><CheckCircle size={16}/> Terminer</span> : <span className="flex items-center gap-2"><Edit size={16}/> Modifier Tarifs</span>}
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {prices.map((category, catIdx) => (
+                            <GlassCard key={catIdx} className="overflow-hidden">
+                                <div className="p-4 bg-indigo-900/30 border-b border-indigo-500/20">
+                                    <h3 className="font-bold text-white text-lg flex items-center gap-2"><Tag size={18} className="text-indigo-400"/> {category.category}</h3>
+                                </div>
+                                <div className="divide-y divide-gray-800">
+                                    {category.items.map((item, itemIdx) => (
+                                        <div key={itemIdx} className="p-4 flex justify-between items-center hover:bg-white/5 transition-colors">
+                                            {isEditingPrices ? (
+                                                <div className="flex items-center gap-2 w-full">
+                                                    <input 
+                                                      className="bg-black/40 border border-gray-700 rounded px-2 py-1 text-sm text-gray-300 w-full"
+                                                      value={item.name}
+                                                      onChange={(e) => handlePriceChange(catIdx, itemIdx, 'name', e.target.value)}
+                                                    />
+                                                    <input 
+                                                      type="number"
+                                                      className="bg-black/40 border border-gray-700 rounded px-2 py-1 text-sm text-white font-mono font-bold w-24 text-right"
+                                                      value={item.price}
+                                                      onChange={(e) => handlePriceChange(catIdx, itemIdx, 'price', e.target.value === '' ? 0 : parseFloat(e.target.value))}
+                                                    />
+                                                    <button onClick={() => handleDeleteItem(catIdx, itemIdx)} className="text-red-500 hover:text-red-400 p-1"><Trash2 size={16}/></button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <span className="text-gray-300">{item.name}</span>
+                                                    <span className="font-mono font-bold text-white">${item.price}</span>
+                                                </>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {isEditingPrices && (
+                                        <div className="p-2">
+                                            <button onClick={() => handleAddItem(catIdx)} className="w-full py-2 border-2 border-dashed border-gray-700 rounded-lg text-gray-500 hover:text-white hover:border-gray-500 text-sm flex items-center justify-center gap-2 transition-all">
+                                                <Plus size={14} /> Ajouter une ligne
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            </GlassCard>
+                        ))}
+                    </div>
+                </div>
+            );
+
+            const renderHelp = () => (
+                <div className="animate-fadeIn max-w-4xl mx-auto space-y-8">
+                    <div className="mb-8">
+                        <h2 className="text-3xl font-black text-white tracking-tight">Aide & Commandes</h2>
+                        <p className="text-gray-400">Guide rapide et commandes utiles.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <GlassCard className="p-6">
+                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Terminal size={20} className="text-indigo-400"/> Commandes Mécaniques</h3>
+                            <div className="space-y-4">
+                                <div className="bg-black/30 p-3 rounded-lg border border-gray-700/50">
+                                    <p className="text-xs text-gray-400 mb-1 uppercase font-bold">Débloquer une pièce en main</p>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <code className="text-sm text-green-400 font-mono">/body:cancel</code>
+                                        <span className="text-xs text-gray-500">Carrosserie</span>
+                                    </div>
+                                    <div className="flex justify-between items-center">
+                                        <code className="text-sm text-green-400 font-mono">/component:cancel</code>
+                                        <span className="text-xs text-gray-500">Moteur</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </GlassCard>
+
+                        <GlassCard className="p-6">
+                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Settings size={20} className="text-indigo-400"/> Commandes Workflow</h3>
+                            <div className="space-y-2">
+                                {['/workflow:clear', '/workflow:close', '/workflow:cursor', '/workflow:open'].map(cmd => (
+                                    <div key={cmd} className="flex items-center justify-between bg-black/30 p-2 rounded-lg border border-gray-700/50">
+                                        <code className="text-sm text-blue-400 font-mono">{cmd}</code>
+                                    </div>
+                                ))}
+                            </div>
+                        </GlassCard>
+                    </div>
+
+                    <GlassCard className="p-6 border-t-4 border-t-purple-500">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2"><MessageSquare size={20} className="text-purple-400"/> Messages Prédéfinis</h3>
+                            {isBoss && (
+                                <button onClick={() => {
+                                    if(isEditingMessages) saveCustomMessages();
+                                    else setIsEditingMessages(true);
+                                }} className="text-xs text-gray-400 hover:text-white flex items-center gap-1">
+                                    {isEditingMessages ? <><CheckCircle size={14}/> Terminer</> : <><Edit size={14}/> Modifier</>}
+                                </button>
+                            )}
+                        </div>
+                        <div className="space-y-4">
+                            <div className="bg-gray-800/50 p-4 rounded-xl flex items-start gap-4">
+                                <div className="flex-1">
+                                    <span className="text-xs font-bold text-emerald-400 uppercase mb-1 block">Ouverture</span>
+                                    {isEditingMessages ? (
+                                        <textarea 
+                                            className="w-full bg-black/40 border border-gray-700 rounded-lg p-2 text-sm text-white" 
+                                            value={customMessages.open}
+                                            onChange={(e) => setCustomMessages({...customMessages, open: e.target.value})}
+                                        />
+                                    ) : (
+                                        <p className="text-gray-300 italic">"{customMessages.open}"</p>
+                                    )}
+                                </div>
+                                {!isEditingMessages && <button onClick={() => handleCopyText(customMessages.open)} className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition-colors"><Copy size={16}/></button>}
+                            </div>
+                            <div className="bg-gray-800/50 p-4 rounded-xl flex items-start gap-4">
+                                <div className="flex-1">
+                                    <span className="text-xs font-bold text-red-400 uppercase mb-1 block">Fermeture</span>
+                                    {isEditingMessages ? (
+                                        <textarea 
+                                            className="w-full bg-black/40 border border-gray-700 rounded-lg p-2 text-sm text-white" 
+                                            value={customMessages.close}
+                                            onChange={(e) => setCustomMessages({...customMessages, close: e.target.value})}
+                                        />
+                                    ) : (
+                                        <p className="text-gray-300 italic">"{customMessages.close}"</p>
+                                    )}
+                                </div>
+                                {!isEditingMessages && <button onClick={() => handleCopyText(customMessages.close)} className="p-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-white transition-colors"><Copy size={16}/></button>}
+                            </div>
+                        </div>
+                    </GlassCard>
+                </div>
+            );
+
+            const renderHR = () => {
+                const canRecruit = isBoss; 
+                const canEditFull = isBoss;
+                const canEditContractOnly = isLawyer; 
+
+                const missingContracts = employees.filter(e => !e.contractUrl).length;
+
+                return (
+                <div className="animate-fadeIn max-w-6xl mx-auto">
+                    <div className="mb-8 flex justify-between items-end">
+                        <div>
+                            <h2 className="text-3xl font-black text-white tracking-tight">Ressources Humaines</h2>
+                            <p className="text-gray-400">Gestion des effectifs.</p>
+                        </div>
+                        {isLawyer && missingContracts > 0 && (
+                            <div className="bg-red-500/10 text-red-400 px-4 py-2 rounded-xl border border-red-500/20 font-bold flex items-center gap-2 animate-pulse">
+                                <AlertCircle size={20} />
+                                {missingContracts} Contrat(s) manquant(s)
+                            </div>
+                        )}
+                    </div>
+                    
+                    {(isBoss || isLawyer) && applications.length > 0 && (
+                        <div className="mb-8">
+                             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                <Briefcase size={20} className="text-indigo-400"/> Candidatures en attente ({applications.length})
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {applications.map(app => (
+                                    <GlassCard key={app.id} className="p-4 border border-indigo-500/30">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h4 className="font-bold text-white">{app.name}</h4>
+                                            <span className="text-xs text-gray-500">{new Date(app.date).toLocaleDateString()}</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 text-xs text-gray-400 mb-2">
+                                            <span>Né(e) le: {new Date(app.dob).toLocaleDateString()}</span>
+                                            <span>Age HRP: {app.ageHRP} ans</span>
+                                        </div>
+                                        <div className="flex flex-col gap-1 text-xs text-gray-400 mb-3">
+                                            <div className="flex items-center gap-1"><Phone size={12}/> {app.phoneRP}</div>
+                                            <div className="flex items-center gap-1"><MessageCircle size={12}/> {app.discord}</div>
+                                            <div className="mt-1"><strong>Dispo:</strong> {app.availability}</div>
+                                        </div>
+                                        <div className="bg-black/20 p-2 rounded text-sm text-gray-300 italic mb-4">"{app.motivation}"</div>
+                                        <div className="flex gap-2">
+                                            {isBoss && <Button onClick={() => handleAcceptApplication(app)} className="flex-1 text-xs py-2" variant="success">Recruter</Button>}
+                                            {isBoss && <Button onClick={() => handleRejectApplication(app.id)} className="flex-1 text-xs py-2" variant="danger">Refuser</Button>}
+                                            {isLawyer && !isBoss && <div className="text-xs text-gray-500 italic w-full text-center">En attente de validation patron</div>}
+                                        </div>
+                                    </GlassCard>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {canRecruit && (
+                            <div className="lg:col-span-1">
+                                <GlassCard className="p-6 h-full border-t-4 border-t-indigo-500">
+                                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                                        <UserPlus size={20} className="text-indigo-400"/> Recrutement Manuel
+                                    </h3>
+                                    <div className="space-y-4">
+                                        <Input label="Nom complet" placeholder="Ex: John Doe" value={newEmployee.name} onChange={(e) => setNewEmployee({...newEmployee, name: e.target.value})} />
+                                        <Input label="Date de naissance" type="date" value={newEmployee.dob} onChange={(e) => setNewEmployee({...newEmployee, dob: e.target.value})} />
+                                        <Select label="Grade / Poste" options={grades.map(g => ({value: g.name, label: g.name}))} value={newEmployee.grade} onChange={(e) => setNewEmployee({...newEmployee, grade: e.target.value})} />
+                                        <Input label="Lien Contrat (GDoc)" type="url" placeholder="https://..." value={newEmployee.contractUrl} onChange={(e) => setNewEmployee({...newEmployee, contractUrl: e.target.value})} />
+                                        <Input label="IBAN" placeholder="LS89..." value={newEmployee.iban} onChange={(e) => setNewEmployee({...newEmployee, iban: e.target.value})} />
+                                        <div className="pt-4">
+                                            <Button onClick={handleAddEmployee} className="w-full" variant="primary">Embaucher</Button>
+                                        </div>
+                                    </div>
+                                </GlassCard>
+                            </div>
+                        )}
+
+                        <div className={canRecruit ? "lg:col-span-2" : "lg:col-span-3"}>
+                            <GlassCard className="overflow-hidden h-full flex flex-col">
+                                <div className="p-4 border-b border-gray-800 bg-gray-900/50">
+                                    <h3 className="font-bold text-white">Effectifs</h3>
+                                    {isBoss && dashboardTargetUser && <button onClick={() => setDashboardTargetUser(null)} className="text-xs text-indigo-400 hover:text-white">Retour liste</button>}
+                                </div>
+                                <div className="overflow-auto custom-scrollbar flex-1 max-h-[600px]">
+                                    <table className="w-full text-left">
+                                        <thead className="sticky top-0 bg-gray-900 z-10">
+                                            <tr className="text-gray-500 text-xs uppercase tracking-wider">
+                                                <th className="p-4 pl-6">Identité</th>
+                                                <th className="p-4">Poste</th>
+                                                <th className="p-4">Contrat</th>
+                                                <th className="p-4 text-center">IBAN</th>
+                                                <th className="p-4 text-center">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-800">
+                                            {sortedEmployees.map((emp) => (
+                                                <tr key={emp.id} className="hover:bg-white/5 transition-colors group">
+                                                    <td className="p-4 pl-6">
+                                                        <div className="font-bold text-white">{emp.name}</div>
+                                                        <div className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={10} /> Né(e) le {emp.dob ? new Date(emp.dob).toLocaleDateString() : 'N/A'}</div>
+                                                    </td>
+                                                    <td className="p-4"><StatusBadge color={getGradeColor(emp.grade)}>{emp.grade}</StatusBadge></td>
+                                                    <td className="p-4">
+                                                        {emp.contractUrl ? (
+                                                            <a href={emp.contractUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 text-xs font-medium bg-indigo-500/10 px-2 py-1 rounded w-fit"><FileText size={12} /> Voir</a>
+                                                        ) : (
+                                                            <span className="text-red-400 text-xs italic font-bold flex items-center gap-1"><AlertCircle size={10}/> Manquant</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-4 text-center"><span className="font-mono text-xs text-gray-400">{emp.iban || '-'}</span></td>
+                                                    <td className="p-4 text-center">
+                                                        <div className="flex items-center justify-center gap-2">
+                                                            {isBoss && <button onClick={() => handleViewEmployeeStats(emp)} className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg hover:bg-indigo-500 hover:text-white transition-all" title="Voir Stats"><Eye size={16} /></button>}
+                                                            <button onClick={() => { setEditingEmployee({...emp}); setConfirmFire(false); }} className="p-2 bg-blue-500/10 text-blue-400 rounded-lg hover:bg-blue-500 hover:text-white transition-all" title="Modifier"><Edit size={16} /></button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </GlassCard>
+                        </div>
+                    </div>
+                    {editingEmployee && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fadeIn">
+                            <GlassCard className="w-full max-w-lg p-6 relative bg-gray-900 border border-indigo-500/30 shadow-2xl shadow-indigo-500/20">
+                                <button onClick={() => setEditingEmployee(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded-full transition-colors"><X size={24} /></button>
+                                <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2"><div className="p-2 bg-indigo-500 rounded-lg text-white"><Edit size={20} /></div> Modifier Employé</h3>
+                                <div className="space-y-4">
+                                    <Input label="Nom complet" value={editingEmployee.name} onChange={(e) => setEditingEmployee({...editingEmployee, name: e.target.value})} readOnly={!canEditFull} />
+                                    <Input label="Date de naissance" type="date" value={editingEmployee.dob} onChange={(e) => setEditingEmployee({...editingEmployee, dob: e.target.value})} readOnly={!canEditFull}/>
+                                    <Select label="Grade / Poste" options={grades.map(g => ({value: g.name, label: g.name}))} value={editingEmployee.grade} onChange={(e) => setEditingEmployee({...editingEmployee, grade: e.target.value})} readOnly={!canEditFull} />
+                                    
+                                    <div className="p-2 bg-indigo-500/10 border border-indigo-500/30 rounded-xl space-y-2">
+                                        <Input label="Lien Contrat (GDoc)" type="url" value={editingEmployee.contractUrl} onChange={(e) => setEditingEmployee({...editingEmployee, contractUrl: e.target.value})} prefix={<FileSignature size={14}/>}/>
+                                        <Input label="IBAN" value={editingEmployee.iban} onChange={(e) => setEditingEmployee({...editingEmployee, iban: e.target.value})} prefix={<CreditCard size={14}/>}/>
+                                    </div>
+                                    
+                                    {canEditFull && (
+                                        <div className="pt-4 mt-2 border-t border-gray-700/50 bg-indigo-500/5 p-4 rounded-xl">
+                                            <h4 className="text-sm font-bold text-indigo-300 uppercase mb-3 flex items-center gap-2"><Key size={14}/> Accès Sécurisé</h4>
+                                            <Input label="Nouveau Mot de passe" type="text" prefix={<Lock size={14}/>} value={editingEmployee.password} onChange={(e) => setEditingEmployee({...editingEmployee, password: e.target.value})} placeholder="Définir un mot de passe..." />
+                                        </div>
+                                    )}
+
+                                    <div className="pt-4 flex gap-3">
+                                        <Button variant="secondary" onClick={() => setEditingEmployee(null)} className="flex-1">Annuler</Button>
+                                        <Button onClick={handleSaveEdit} className="flex-1 shadow-indigo-500/25">Enregistrer</Button>
+                                    </div>
+                                    
+                                    {canEditFull && editingEmployee.id !== currentUser.id && (
+                                        <div className="mt-6 pt-4 border-t border-red-500/20">
+                                             <h4 className="text-sm font-bold text-red-400 uppercase mb-2 flex items-center gap-2"><AlertCircle size={14}/> Zone de Danger</h4>
+                                             {!confirmFire ? (
+                                                 <Button variant="danger" onClick={() => setConfirmFire(true)} className="w-full justify-center"><UserMinus size={16} /> Licencier cet employé</Button>
+                                             ) : (
+                                                 <div className="flex gap-2 animate-fadeIn">
+                                                      <Button variant="secondary" onClick={() => setConfirmFire(false)} className="flex-1">Annuler</Button>
+                                                      <Button variant="danger" onClick={() => { handleFireEmployee(editingEmployee.id); setEditingEmployee(null); }} className="flex-1 justify-center bg-red-600 hover:bg-red-700 border-red-500">Confirmer !</Button>
+                                                 </div>
+                                             )}
+                                             {confirmFire && <p className="text-center text-xs text-red-400 mt-2">Cette action est irréversible.</p>}
+                                        </div>
+                                    )}
+                                </div>
+                            </GlassCard>
+                        </div>
+                    )}
+                </div>
+            );
+            };
+            
+            const renderContracts = () => {
+                const canEdit = isBoss || isLawyer;
+
+                return (
+                <div className="animate-fadeIn max-w-6xl mx-auto">
+                    <div className="mb-8 flex justify-between items-end">
+                        <div>
+                            <h2 className="text-3xl font-black text-white tracking-tight">Contrats Entreprises</h2>
+                            <p className="text-gray-400">Gestion des partenariats et accès aux documents.</p>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        {/* Form Column (Restricted) */}
+                        {canEdit && (
+                            <div className="lg:col-span-1">
+                                <GlassCard className="p-6 border-t-4 border-t-indigo-500 h-full flex flex-col">
+                                    <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                                        <FileSignature size={20} className="text-indigo-400"/> {editingContractId ? 'Modifier Contrat' : 'Nouveau Contrat'}
+                                    </h3>
+                                    <div className="space-y-4 flex-1">
+                                        <Input label="Nom de l'entreprise" placeholder="Ex: LSPD" value={newContract.company} onChange={(e) => setNewContract({...newContract, company: e.target.value})} />
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Input label="Date début" type="date" value={newContract.date} onChange={(e) => setNewContract({...newContract, date: e.target.value})} />
+                                            <Input label="Date fin (Optionnel)" type="date" value={newContract.endDate} onChange={(e) => setNewContract({...newContract, endDate: e.target.value})} />
+                                        </div>
+                                        <Input label="Lien Google Doc (Principal)" type="url" placeholder="https://..." value={newContract.url} onChange={(e) => setNewContract({...newContract, url: e.target.value})} />
+                                        
+                                        {/* MODIFICATION ICI : Zone Conditions agrandie */}
+                                        <div className="flex flex-col gap-2 w-full">
+                                            <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider ml-1">Conditions</label>
+                                            <textarea 
+                                                className="w-full bg-black/40 border border-gray-700 rounded-xl py-3 px-4 text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition-all text-lg min-h-[120px] resize-none"
+                                                placeholder="Ex: Maintenance véhicules, tarifs préférentiels..."
+                                                value={newContract.description}
+                                                onChange={(e) => setNewContract({...newContract, description: e.target.value})}
+                                            ></textarea>
+                                        </div>
+                                        
+                                        <div className="pt-2 border-t border-gray-700/50 mt-2">
+                                            <label className="text-xs font-bold text-indigo-300 uppercase tracking-wider mb-2 block">Documents Annexes</label>
+                                            <div className="flex gap-2 mb-2">
+                                                <input className="w-1/2 bg-black/40 border border-gray-700 rounded-lg px-2 py-1 text-sm text-white" placeholder="Nom (ex: Tarifs)" value={tempDoc.name} onChange={(e) => setTempDoc({...tempDoc, name: e.target.value})}/>
+                                                <input className="w-1/2 bg-black/40 border border-gray-700 rounded-lg px-2 py-1 text-sm text-white" placeholder="URL" value={tempDoc.url} onChange={(e) => setTempDoc({...tempDoc, url: e.target.value})}/>
+                                                <button onClick={handleAddTempDoc} className="bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg p-1 transition-colors"><Plus size={16}/></button>
+                                            </div>
+                                            {newContract.supplementaryDocs.length > 0 && (
+                                                <ul className="space-y-1 mb-4">
+                                                    {newContract.supplementaryDocs.map((doc, idx) => (
+                                                        <li key={idx} className="flex items-center gap-2 text-xs text-gray-300 bg-white/5 px-2 py-1 rounded"><Paperclip size={10} /> {doc.name}</li>
+                                                    ))}
+                                                </ul>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="pt-4 mt-auto flex gap-2">
+                                        {editingContractId && <Button variant="secondary" onClick={handleCancelContractEdit} className="flex-1">Annuler</Button>}
+                                        <Button onClick={handleSaveContract} className="flex-1">{editingContractId ? 'Sauvegarder' : 'Ajouter'}</Button>
+                                    </div>
+                                </GlassCard>
+                            </div>
+                        )}
+
+                        <div className={`${canEdit ? 'lg:col-span-2' : 'lg:col-span-3'} grid grid-cols-1 md:grid-cols-2 gap-4`}>
+                            {contracts.map(contract => {
+                                const isExpired = contract.endDate && new Date(contract.endDate) < new Date();
+                                return (
+                                <GlassCard key={contract.id} className={`p-6 relative group border border-transparent transition-all ${isExpired ? 'border-red-500/30 bg-red-500/5' : 'hover:border-indigo-500/50'}`}>
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className={`p-3 rounded-xl ${isExpired ? 'bg-red-500/20 text-red-400' : 'bg-indigo-500/10 text-indigo-400'}`}>
+                                                <Building size={28} />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-white text-xl flex items-center gap-2">
+                                                    {contract.company}
+                                                    {isExpired ? <span className="text-[10px] bg-red-500 text-white px-2 py-0.5 rounded-full uppercase font-bold tracking-wide">Expiré</span> : <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full uppercase font-bold tracking-wide">Actif</span>}
+                                                </h3>
+                                                <div className="flex items-center gap-3 text-xs text-gray-500 mt-1">
+                                                    <span className="flex items-center gap-1"><Clock size={12}/> Début: {new Date(contract.date).toLocaleDateString()}</span>
+                                                    {contract.endDate && <span className={`flex items-center gap-1 ${isExpired ? 'text-red-400 font-bold' : ''}`}><Clock size={12}/> Fin: {new Date(contract.endDate).toLocaleDateString()}</span>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {canEdit && <button onClick={() => handleEditContractClick(contract)} className="p-2 bg-gray-800 hover:bg-blue-500/20 text-gray-500 hover:text-blue-500 rounded-lg transition-all" title="Modifier"><Edit size={18}/></button>}
+                                            {isBoss && <button onClick={() => handleDeleteContract(contract.id)} className={`p-2 rounded-lg transition-all ${deleteConfirmId === contract.id ? 'bg-red-500 text-white' : 'bg-gray-800 hover:bg-red-500/20 text-gray-500 hover:text-red-500'}`} title={deleteConfirmId === contract.id ? "Confirmer la suppression" : "Supprimer"}>{deleteConfirmId === contract.id ? <CheckCircle size={18}/> : <Trash2 size={18}/>}</button>}
+                                        </div>
+                                    </div>
+                                    {/* MODIFICATION ICI : Affichage de la description agrandi */}
+                                    <p className="text-gray-300 text-base mb-6 pl-1 border-l-2 border-indigo-500/30 ml-2 whitespace-pre-wrap">{contract.description}</p>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <a href={contract.url} target="_blank" rel="noopener noreferrer" className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-bold transition-all ${contract.url ? 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-lg shadow-indigo-500/20' : 'bg-gray-800 text-gray-500 cursor-not-allowed'}`}><FileText size={18} /> Contrat Principal</a>
+                                        {contract.supplementaryDocs && contract.supplementaryDocs.length > 0 && (
+                                            <div className="flex flex-col gap-2">
+                                                {contract.supplementaryDocs.map((doc, i) => (
+                                                    <a key={i} href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center justify-between px-4 py-2 bg-gray-800/50 hover:bg-gray-800 border border-gray-700 rounded-lg text-sm text-gray-300 hover:text-white transition-colors">
+                                                        <span className="flex items-center gap-2"><Paperclip size={14} className="text-indigo-400"/> {doc.name}</span><ExternalLink size={12} className="opacity-50"/>
+                                                    </a>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </GlassCard>
+                            )})}
+                        </div>
+                    </div>
+                </div>
+                );
+            };
+
+             const renderSalaries = () => (
+                 <div className="animate-fadeIn">
+                    <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} />
+                    <div className="mb-8">
+                        <h2 className="text-3xl font-black text-white tracking-tight">Salaires & Primes</h2>
+                        <p className="text-gray-400">Suivi des objectifs de la semaine sélectionnée.</p>
+                    </div>
+                    {/* MODIFICATION ICI : Ajout du wrapper overflow-x-auto et min-width sur la table */}
+                    <GlassCard className="overflow-hidden flex flex-col">
+                        <div className="p-1 bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500 opacity-20"></div>
+                        <div className="overflow-x-auto custom-scrollbar">
+                            <table className="w-full text-left min-w-[900px]">
+                                <thead>
+                                    <tr className="bg-gray-900/50 border-b border-gray-800 text-gray-500 text-xs uppercase tracking-wider">
+                                        <th className="p-5">Employé</th>
+                                        <th className="p-5 w-1/3">Progression Quota</th>
+                                        <th className="p-5 text-right">Salaire (Proportionnel)</th>
+                                        <th className="p-5 text-right">Prime (Conditionnelle)</th>
+                                        <th className="p-5 text-right">Total à Payer</th>
+                                        <th className="p-5 text-center">Fiche</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-800/50">
+                                    {weeklyStats.employeeStats.filter(e => e.grade !== 'Avocat').map(emp => { 
+                                        const gradeInfo = grades.find(g => g.name === emp.grade);
+                                        const quota = gradeInfo ? gradeInfo.quota : 25;
+                                        const progress = Math.min((emp.invoiceCount / 25) * 100, 100);
+                                        const isComplete = progress >= 100;
+                                        const maxSalary = gradeInfo ? gradeInfo.maxSalary : 0;
+                                        const earnedSalary = maxSalary * (progress / 100);
+                                        const bonusAmount = emp.bonusTheorique;
+                                        const finalBonus = isComplete ? bonusAmount : 0; 
+                                        return (
+                                            <tr key={emp.id} className="group hover:bg-white/5 transition-colors">
+                                                <td className="p-5">
+                                                    <div className="font-bold text-white text-lg">{emp.name}</div>
+                                                    <div className="text-xs text-indigo-400 font-medium uppercase tracking-wide">{emp.grade}</div>
+                                                </td>
+                                                <td className="p-5">
+                                                    <div className="flex flex-col gap-2">
+                                                        <div className="flex justify-between text-xs font-semibold">
+                                                            <span className={isComplete ? "text-emerald-400" : "text-gray-400"}>{emp.invoiceCount} {quota > 0 ? `/ ${quota}` : ''} factures</span>
+                                                            <span className="text-white">{Math.round(progress)}%</span>
+                                                        </div>
+                                                        {quota > 0 && (
+                                                            <div className="h-2.5 bg-gray-800 rounded-full overflow-hidden shadow-inner">
+                                                                <div className={`h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden ${isComplete ? 'bg-gradient-to-r from-emerald-500 to-teal-400' : 'bg-gradient-to-r from-indigo-500 to-violet-500'}`} style={{width: `${progress}%`}}>
+                                                                    <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="p-5 text-right font-mono">
+                                                    <div className="text-white font-medium">${earnedSalary.toFixed(0)}</div>
+                                                    <div className="text-xs text-gray-600">Max: ${maxSalary}</div>
+                                                </td>
+                                                <td className="p-5 text-right">
+                                                    {isComplete ? (
+                                                        <div className="flex items-center justify-end gap-2 text-emerald-400 font-bold font-mono animate-fadeIn"><Unlock size={14} /> +${bonusAmount.toLocaleString()}</div>
+                                                    ) : (
+                                                        <div className="flex flex-col items-end animate-fadeIn">
+                                                            <div className="flex items-center gap-2 text-amber-500 font-mono opacity-80"><Lock size={14} /> +${bonusAmount.toLocaleString()}</div>
+                                                            <span className="text-[10px] text-amber-500/60 uppercase tracking-wide">Bloqué (Quota non atteint)</span>
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="p-5 text-right">
+                                                    <div className={`inline-block px-3 py-1 rounded-lg border font-mono font-bold shadow-lg transition-colors ${isComplete ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-100' : 'bg-gray-800 border-gray-700 text-white'}`}>
+                                                        ${(earnedSalary + finalBonus).toLocaleString()}
+                                                    </div>
+                                                </td>
+                                                <td className="p-5 text-center">
+                                                    <button 
+                                                        onClick={() => generatePaySlipPDF(emp, { baseSalary: earnedSalary, bonus: finalBonus, total: earnedSalary + finalBonus }, selectedDate)}
+                                                        className="p-2 bg-gray-800 hover:bg-white hover:text-black text-gray-400 rounded-lg transition-all border border-gray-700"
+                                                        title="Télécharger Fiche de Paie"
+                                                    >
+                                                        <Download size={18}/>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </GlassCard>
+                </div>
+            );
+
+             const renderSettings = () => (
+                 <div className="animate-fadeIn max-w-4xl mx-auto space-y-8">
+                    <div>
+                        <h2 className="text-3xl font-black text-white tracking-tight">Configuration</h2>
+                        <p className="text-gray-400">Paramètres de rentabilité.</p>
+                    </div>
+                    <GlassCard className="p-6 border-t-4 border-t-emerald-500">
+                         <h3 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                            <DollarSign size={20} className="text-emerald-400"/> Coûts & Taxes
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                             <div>
+                                <Input label="Coût Réparation (% du prix)" type="number" value={config.repairCostPercent} onChange={(e) => saveConfig('repairCostPercent', e.target.value === '' ? 0 : parseFloat(e.target.value))} />
+                                <p className="text-xs text-gray-500 mt-2">Défaut: 50% du prix facturé part en coût.</p>
+                             </div>
+                             <div>
+                                 <Input label="Coût/Taxe Custom (% du prix)" type="number" value={config.customCostPercent} onChange={(e) => saveConfig('customCostPercent', e.target.value === '' ? 0 : parseFloat(e.target.value))} />
+                                 <p className="text-xs text-gray-500 mt-2">Défaut: 20% du prix facturé part en taxes/matériel.</p>
+                             </div>
+                        </div>
+                    </GlassCard>
+                    <GlassCard className="overflow-hidden">
+                        <div className="px-6 py-4 border-b border-gray-800 bg-gray-900/50 flex justify-between items-center">
+                            <h3 className="font-bold text-white">Grilles de Salaires</h3>
+                        </div>
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="bg-gray-900/50 border-b border-gray-800 text-gray-500 text-xs uppercase tracking-wider">
+                                    <th className="p-4 pl-6">Grade</th>
+                                    <th className="p-4 text-center">Prime (%)</th>
+                                    <th className="p-4 text-center">Salaire Max</th>
+                                    <th className="p-4 text-center">Quota</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-800">
+                                {grades.map(grade => (
+                                    <tr key={grade.id} className="hover:bg-white/5 transition-colors">
+                                        <td className="p-4 pl-6 font-bold text-white">{grade.name}</td>
+                                        <td className="p-4 text-center">
+                                            <input type="number" value={grade.primePercent} onChange={(e) => handleUpdateGrade(grade.id, 'primePercent', e.target.value === '' ? 0 : parseInt(e.target.value))} className="bg-black/40 border border-gray-700 rounded-lg px-2 py-1 w-20 text-center text-indigo-400 focus:border-indigo-500 outline-none font-mono" />
+                                        </td>
+                                        <td className="p-4 text-center">
+                                            <input type="number" value={grade.maxSalary} onChange={(e) => handleUpdateGrade(grade.id, 'maxSalary', e.target.value === '' ? 0 : parseInt(e.target.value))} className="bg-black/40 border border-gray-700 rounded-lg px-2 py-1 w-24 text-center text-emerald-400 focus:border-emerald-500 outline-none font-mono" />
+                                        </td>
+                                        <td className="p-4 text-center">
+                                            <input type="number" value={grade.quota} onChange={(e) => handleUpdateGrade(grade.id, 'quota', e.target.value === '' ? 0 : parseInt(e.target.value))} className="bg-black/40 border border-gray-700 rounded-lg px-2 py-1 w-20 text-center text-white focus:border-white outline-none font-mono" />
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </GlassCard>
+                    
+                    {/* New Danger Zone Card */}
+                    <GlassCard className="p-6 border-t-4 border-t-red-500">
+                         <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                            <AlertCircle size={20} className="text-red-500"/> Zone de Danger
+                        </h3>
+                        <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl">
+                            <p className="text-red-200 text-sm mb-4">
+                                Cette action effacera définitivement tout l'historique des factures et remettra les compteurs du Dashboard et des employés à zéro.
+                                <br/><strong>Cette action est irréversible.</strong>
+                            </p>
+                            
+                            {!confirmReset ? (
+                                <Button variant="danger" onClick={() => setConfirmReset(true)}>
+                                    <Trash2 size={16} /> Réinitialiser toutes les statistiques
+                                </Button>
+                            ) : (
+                                <div className="flex items-center gap-3 animate-fadeIn">
+                                     <Button variant="secondary" onClick={() => setConfirmReset(false)}>
+                                        Annuler
+                                     </Button>
+                                     <Button variant="danger" onClick={handleResetStats}>
+                                        Confirmer la suppression
+                                     </Button>
+                                </div>
+                            )}
+                        </div>
+                    </GlassCard>
+                </div>
+            );
+
+
+            if (!currentUser) return renderAuthScreen;
+
+            return (
+                <div className="min-h-screen bg-[#050505] text-gray-200 font-sans selection:bg-indigo-500/30 flex overflow-hidden">
+                    <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="lg:hidden fixed top-4 right-4 z-50 p-2 bg-gray-800 rounded-lg text-white shadow-lg border border-gray-700">{isSidebarOpen ? <X size={24} /> : <Menu size={24} />}</button>
+
+                    <aside className={`fixed lg:static inset-y-0 left-0 z-40 w-72 bg-[#0a0a0a] border-r border-white/5 flex flex-col transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+                        <div className="p-8 pb-4">
+                            <div className="flex items-center gap-3 mb-1">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30"><Wallet size={20} /></div>
+                                <div><h1 className="text-xl font-black text-white tracking-tight">Southside <span className="text-indigo-500">Manager</span></h1><p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Business Panel</p></div>
+                            </div>
+                        </div>
+
+                        <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto custom-scrollbar">
+                            <p className="px-4 text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">Principal</p>
+                            {/* Hide operation tabs for Lawyer */}
+                            {currentUser.grade !== 'Avocat' && (
+                                <>
+                                    <NavItem tabId="facture" icon={Plus} label="Nouvelle Facture" activeTab={activeTab} onClick={handleNavClick} />
+                                    <NavItem tabId="personal" icon={User} label="Mon Espace" activeTab={activeTab} onClick={handleNavClick} /> 
+                                    <NavItem tabId="historique" icon={History} label="Historique" activeTab={activeTab} onClick={handleNavClick} />
+                                </>
+                            )}
+                            
+                            <NavItem tabId="contracts" icon={FileSignature} label="Contrats" activeTab={activeTab} onClick={handleNavClick} />
+
+                            {currentUser.grade !== 'Avocat' && (
+                                <>
+                                    <NavItem tabId="planning" icon={Calendar} label="Planning" activeTab={activeTab} onClick={handleNavClick} />
+                                    <NavItem tabId="tarifs" icon={Tag} label="Tarifs" activeTab={activeTab} onClick={handleNavClick} />
+                                    <NavItem tabId="aide" icon={HelpCircle} label="Aide & Commandes" activeTab={activeTab} onClick={handleNavClick} />
+                                </>
+                            )}
+                            
+                            {/* Admin or Lawyer Access */}
+                            {(currentUser.role === 'admin' || currentUser.grade === 'Avocat') && (
+                                <>
+                                    <p className="px-4 text-xs font-bold text-gray-600 uppercase tracking-wider mt-6 mb-2">Gestion</p>
+                                    {currentUser.role === 'admin' && <NavItem tabId="dashboard" icon={LayoutDashboard} label="Dashboard Global" activeTab={activeTab} onClick={handleNavClick} />}
+                                    <NavItem tabId="hr" icon={Briefcase} label="Ressources Humaines" activeTab={activeTab} onClick={handleNavClick} />
+                                    {currentUser.role === 'admin' && <NavItem tabId="salaires" icon={Award} label="Salaires & Primes" activeTab={activeTab} onClick={handleNavClick} />}
+                                    {currentUser.role === 'admin' && (
+                                        <>
+                                            <p className="px-4 text-xs font-bold text-gray-600 uppercase tracking-wider mt-6 mb-2">Admin</p>
+                                            <NavItem tabId="settings" icon={Settings} label="Configuration" activeTab={activeTab} onClick={handleNavClick} />
+                                        </>
+                                    )}
+                                </>
+                            )}
+                        </nav>
+
+                        <div className="p-4 border-t border-white/5 bg-white/2 mx-4 mb-4 rounded-2xl">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-gray-700 border-2 border-gray-600 flex items-center justify-center"><span className="font-bold text-white text-xs">{currentUser.name.charAt(0)}</span></div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-bold text-white truncate">{currentUser.name}</p>
+                                    <StatusBadge color={getGradeColor(currentUser.grade)}>{currentUser.grade}</StatusBadge>
+                                </div>
+                                <button onClick={handleLogout} className="text-gray-500 hover:text-white transition-colors" title="Déconnexion"><LogOut size={18} /></button>
+                            </div>
+                        </div>
+                    </aside>
+
+                    <main className="flex-1 relative h-screen overflow-hidden flex flex-col bg-gradient-to-br from-gray-900 via-black to-black">
+                        <div className="absolute top-0 left-0 w-full h-96 bg-indigo-900/10 blur-[100px] pointer-events-none"></div>
+                        <div className="absolute bottom-0 right-0 w-96 h-96 bg-violet-900/10 blur-[100px] pointer-events-none"></div>
+
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-10 relative z-10">
+                            {/* RENDER CONDITIONS */}
+                            {activeTab === 'facture' && renderInvoiceForm()}
+                            {activeTab === 'personal' && renderPersonalDashboard()}
+                            {activeTab === 'historique' && renderHistory()}
+                            {activeTab === 'planning' && renderPlanning()}
+                            {activeTab === 'tarifs' && renderPrices()}
+                            {activeTab === 'aide' && renderHelp()}
+                            {(currentUser.role === 'admin' || currentUser.grade === 'Avocat') && activeTab === 'hr' && renderHR()}
+                            {activeTab === 'contracts' && renderContracts()}
+                            {currentUser.role === 'admin' && activeTab === 'dashboard' && renderDashboard()}
+                            {currentUser.role === 'admin' && activeTab === 'salaires' && renderSalaries()}
+                            {currentUser.role === 'admin' && activeTab === 'settings' && renderSettings()}
+                        </div>
+                        {notification && <div className={`fixed bottom-8 right-8 z-50 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-slideUp backdrop-blur-xl border border-white/10 ${notification.type === 'error' ? 'bg-red-500/20 text-red-200' : 'bg-emerald-500/20 text-emerald-200'}`}><div><p className="font-bold text-white">{notification.type === 'error' ? 'Erreur' : 'Succès'}</p><p className="text-sm opacity-80">{notification.msg}</p></div></div>}
+                    </main>
+                </div>
+            );
+        }
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
