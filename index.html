@@ -156,11 +156,6 @@
         const INITIAL_APPLICATIONS = [
             { id: 'app1', name: 'Jesse Pinkman', dob: '1998-09-20', ageHRP: '25', phoneRP: '555-0192', discord: 'jesse#1234', availability: 'Soirs', motivation: 'Je sais bien bricoler.', date: '2026-02-11T10:00:00' }
         ];
-        const INITIAL_SERVICE_LOGS = [
-            { id: 1, employeeId: 'e2', employeeName: 'Hector Trueman', start: '2026-02-08T08:00:00', end: '2026-02-08T12:00:00' },
-            { id: 2, employeeId: 'e2', employeeName: 'Hector Trueman', start: '2026-02-08T14:00:00', end: '2026-02-08T18:00:00' },
-            { id: 3, employeeId: 'e3', employeeName: 'Mick Maccauley', start: '2026-02-09T10:00:00', end: '2026-02-09T15:00:00' },
-        ];
 
         // ==========================================
         // 2. HELPER FUNCTIONS
@@ -184,13 +179,6 @@
 
         const formatDateRange = (start, end) => {
             return `${start.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`;
-        };
-
-        const getDurationInHours = (startStr, endStr) => {
-            const start = new Date(startStr);
-            const end = endStr ? new Date(endStr) : new Date(); 
-            const diffMs = end - start;
-            return diffMs / (1000 * 60 * 60);
         };
         
         const getGradeColor = (grade) => {
@@ -437,7 +425,6 @@
             const [invoices, setInvoices] = useState([]);
             const [prices, setPrices] = useState(INITIAL_GARAGE_PRICES);
             const [applications, setApplications] = useState([]);
-            const [serviceLogs, setServiceLogs] = useState([]); 
             const [customMessages, setCustomMessages] = useState(INITIAL_MESSAGES);
 
             const [isEditingPrices, setIsEditingPrices] = useState(false);
@@ -511,7 +498,6 @@
                     setEmployees(loadLocal('employees', INITIAL_EMPLOYEES));
                     setContracts(loadLocal('contracts', INITIAL_CONTRACTS));
                     setApplications(loadLocal('applications', INITIAL_APPLICATIONS));
-                    setServiceLogs(loadLocal('serviceLogs', INITIAL_SERVICE_LOGS));
                     setGrades(loadLocal('grades', INITIAL_GRADES));
                     setPrices(loadLocal('prices', INITIAL_GARAGE_PRICES));
                     setConfig(loadLocal('config', INITIAL_CONFIG));
@@ -553,10 +539,6 @@
                     setApplications(snap.docs.map(d => ({ id: d.id, ...d.data(), docId: d.id })));
                 }, handleSnapshotError);
 
-                const unsubLogs = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'service_logs'), (snap) => {
-                    setServiceLogs(snap.docs.map(d => ({ id: d.id, ...d.data(), docId: d.id })));
-                }, handleSnapshotError);
-
                 // --- Settings Documents ---
                 const unsubGrades = onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'grades'), (docSnap) => {
                     if (docSnap.exists()) setGrades(docSnap.data().list);
@@ -579,7 +561,7 @@
                 }, handleSnapshotError);
 
                 return () => {
-                    unsubInvoices(); unsubEmployees(); unsubContracts(); unsubApps(); unsubLogs();
+                    unsubInvoices(); unsubEmployees(); unsubContracts(); unsubApps();
                     unsubGrades(); unsubPrices(); unsubConfig(); unsubMessages();
                 };
             }, [authUser, isOffline]);
@@ -590,7 +572,6 @@
             useEffect(() => { if (isOffline) localStorage.setItem('southside_employees', JSON.stringify(employees)); }, [employees, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_contracts', JSON.stringify(contracts)); }, [contracts, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_applications', JSON.stringify(applications)); }, [applications, isOffline]);
-            useEffect(() => { if (isOffline) localStorage.setItem('southside_serviceLogs', JSON.stringify(serviceLogs)); }, [serviceLogs, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_grades', JSON.stringify(grades)); }, [grades, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_prices', JSON.stringify(prices)); }, [prices, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_config', JSON.stringify(config)); }, [config, isOffline]);
@@ -658,13 +639,8 @@
                 }, {});
                 const pieData = Object.entries(serviceDist).map(([name, value]) => ({ name, value }));
                 
-                const weeklyLogs = serviceLogs.filter(log => {
-                    const logDate = new Date(log.start);
-                    return logDate >= start && logDate <= end;
-                });
-
-                return { totalRevenue, totalProfit, totalBonuses, employeeStats, topClients, activityData, pieData, weeklyInvoices, weeklyLogs };
-            }, [invoices, sortedEmployees, serviceLogs, selectedDate]);
+                return { totalRevenue, totalProfit, totalBonuses, employeeStats, topClients, activityData, pieData, weeklyInvoices };
+            }, [invoices, sortedEmployees, selectedDate]);
 
             const uniqueClients = useMemo(() => {
                 return [...new Set(invoices.map(inv => inv.client))];
@@ -701,31 +677,7 @@
                     setDashboardTargetUser(user); 
                     setLoginError('');
                     
-                    // --- AUTO CLOCK-IN (Write to Firestore or Local) ---
-                    const logPayload = {
-                        employeeId: user.id,
-                        employeeName: user.name,
-                        start: new Date().toISOString(),
-                        end: null
-                    };
-
-                    if (isOffline) {
-                        setServiceLogs(prev => [...prev, { ...logPayload, id: Date.now() }]);
-                        showNotification(`Bienvenue ${user.name}. Prise de service enregistrée (Hors-ligne).`);
-                    } else {
-                        try {
-                            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'service_logs'), logPayload);
-                            showNotification(`Bienvenue ${user.name}. Prise de service enregistrée.`);
-                        } catch (err) {
-                            console.error("Log failed", err);
-                            // If write fails (permission denied), fallback to offline mode? 
-                            // Usually handled by snapshot listener error, but write might fail first.
-                            if (err.code === 'permission-denied') {
-                                setIsOffline(true);
-                                setNotification({ msg: "Erreur écriture (Permission). Mode hors-ligne activé.", type: 'warning' });
-                            }
-                        }
-                    }
+                    showNotification(`Bienvenue ${user.name}.`);
 
                     if (user.role === 'admin') setActiveTab('dashboard');
                     else if (user.grade === 'Avocat') setActiveTab('hr'); 
@@ -736,25 +688,6 @@
             };
 
             const handleLogout = async () => {
-                // --- AUTO CLOCK-OUT (Update Firestore or Local) ---
-                if (currentUser) {
-                    // Find active log for this user
-                    const activeLog = serviceLogs.find(log => log.employeeId === currentUser.id && log.end === null);
-                    if (activeLog) {
-                        if (isOffline) {
-                            setServiceLogs(prev => prev.map(log => log.id === activeLog.id ? { ...log, end: new Date().toISOString() } : log));
-                        } else {
-                            try {
-                                const docRefId = activeLog.docId || activeLog.id;
-                                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'service_logs', docRefId), {
-                                    end: new Date().toISOString()
-                                });
-                            } catch (e) {
-                                console.log("Logout log update failed", e);
-                            }
-                        }
-                    }
-                }
                 setCurrentUser(null);
                 setDashboardTargetUser(null);
                 setLoginForm({ username: '', password: '' });
@@ -1043,16 +976,12 @@
             const handleResetStats = async () => {
                 if (isOffline) {
                     setInvoices([]);
-                    setServiceLogs([]);
                     // Also clear local storage for these keys
                     localStorage.removeItem('southside_invoices');
-                    localStorage.removeItem('southside_serviceLogs');
                 } else {
                     const invoicesQ = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'invoices'));
-                    const logsQ = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'service_logs'));
                     const batch = writeBatch(db);
                     invoicesQ.forEach(d => batch.delete(d.ref));
-                    logsQ.forEach(d => batch.delete(d.ref));
                     await batch.commit();
                 }
                 setConfirmReset(false);
@@ -1184,12 +1113,6 @@
                     return { name: day, ca: val };
                 });
 
-                const myLogs = weeklyStats.weeklyLogs.filter(log => log.employeeId === targetUser.id);
-                let totalHours = 0;
-                myLogs.forEach(log => {
-                    totalHours += getDurationInHours(log.start, log.end);
-                });
-
                 return (
                     <div className="animate-fadeIn space-y-8">
                         <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} />
@@ -1206,7 +1129,7 @@
                                 <StatusBadge color={getGradeColor(targetUser.grade)}>{targetUser.grade}</StatusBadge>
                             </div>
                         </div>
-                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <GlassCard className="p-6 relative overflow-hidden">
                                 <div className="flex justify-between items-start mb-4">
                                     <div>
@@ -1228,16 +1151,6 @@
                                         <p className="text-xs text-gray-500 mt-2 text-right">{Math.round(progress)}% complété</p>
                                     </>
                                 )}
-                            </GlassCard>
-                            <GlassCard className="p-6">
-                                <div className="flex justify-between items-start mb-2">
-                                    <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Heures Service</h3>
-                                    <div className="p-2 bg-pink-500/20 text-pink-400 rounded-lg">
-                                        <Clock size={24} />
-                                    </div>
-                                </div>
-                                <p className="text-3xl font-black text-white">{totalHours.toFixed(1)}h</p>
-                                <p className="text-xs text-gray-500 mt-1">Sur la semaine</p>
                             </GlassCard>
                             <GlassCard className="p-6">
                                 <div className="flex justify-between items-start mb-2">
@@ -1316,65 +1229,6 @@
                                 </div>
                             </GlassCard>
                         </div>
-                    </div>
-                );
-            };
-
-            const renderPlanning = () => {
-                const start = getStartOfWeek(selectedDate);
-                const days = Array.from({length: 7}, (_, i) => {
-                    const d = new Date(start);
-                    d.setDate(d.getDate() + i);
-                    return d;
-                });
-
-                const getLogsForDay = (date) => {
-                    return weeklyStats.weeklyLogs.filter(log => {
-                        const logDate = new Date(log.start);
-                        return logDate.toDateString() === date.toDateString();
-                    });
-                };
-
-                return (
-                    <div className="animate-fadeIn h-full flex flex-col">
-                        <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} />
-                        <div className="mb-6"><h2 className="text-3xl font-black text-white">Planning & Services</h2><p className="text-gray-400">Vue d'ensemble des prises de service de l'équipe.</p></div>
-                        <GlassCard className="flex-1 overflow-hidden flex flex-col">
-                             <div className="flex-1 overflow-auto custom-scrollbar p-6">
-                                <div className="grid grid-cols-7 gap-4 min-w-[1000px]">
-                                    {days.map((day, idx) => {
-                                        const dayLogs = getLogsForDay(day);
-                                        const totalHoursDay = dayLogs.reduce((acc, log) => acc + getDurationInHours(log.start, log.end), 0);
-                                        return (
-                                            <div key={idx} className="flex flex-col gap-3">
-                                                <div className="text-center p-3 bg-gray-800/50 rounded-xl border border-gray-700/50">
-                                                    <div className="text-indigo-400 font-bold uppercase text-xs">{day.toLocaleDateString('fr-FR', { weekday: 'short' })}</div>
-                                                    <div className="text-white font-black text-xl">{day.getDate()}</div>
-                                                    {totalHoursDay > 0 && <div className="mt-1 text-[10px] bg-indigo-500/20 text-indigo-300 rounded px-2 py-0.5">{totalHoursDay.toFixed(1)}h total</div>}
-                                                </div>
-                                                <div className="space-y-2">
-                                                    {dayLogs.map(log => {
-                                                        const duration = getDurationInHours(log.start, log.end);
-                                                        const isFinished = !!log.end;
-                                                        return (
-                                                            <div key={log.id} className={`p-2 rounded-lg border text-xs ${isFinished ? 'bg-gray-800/30 border-gray-700 text-gray-400' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200 animate-pulse'}`}>
-                                                                <div className="font-bold truncate">{log.employeeName}</div>
-                                                                <div className="flex justify-between mt-1 opacity-70 font-mono">
-                                                                    <span>{new Date(log.start).toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'})}</span>
-                                                                    <span>{isFinished ? new Date(log.end).toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'}) : '...'}</span>
-                                                                </div>
-                                                                <div className="mt-1 text-right font-bold opacity-50">{duration.toFixed(1)}h</div>
-                                                            </div>
-                                                        )
-                                                    })}
-                                                    {dayLogs.length === 0 && <div className="text-center text-gray-600 text-xs py-4 italic">-</div>}
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                             </div>
-                        </GlassCard>
                     </div>
                 );
             };
@@ -2062,7 +1916,8 @@
                                     {weeklyStats.employeeStats.filter(e => e.grade !== 'Avocat').map(emp => { 
                                         const gradeInfo = grades.find(g => g.name === emp.grade);
                                         const quota = gradeInfo ? gradeInfo.quota : 25;
-                                        const progress = Math.min((emp.invoiceCount / 25) * 100, 100);
+                                        // CORRECTION ICI : Utilisation de la variable quota au lieu de 25 en dur
+                                        const progress = quota > 0 ? Math.min((emp.invoiceCount / quota) * 100, 100) : 100;
                                         const isComplete = progress >= 100;
                                         const maxSalary = gradeInfo ? gradeInfo.maxSalary : 0;
                                         const earnedSalary = maxSalary * (progress / 100);
@@ -2240,7 +2095,6 @@
 
                             {currentUser.grade !== 'Avocat' && (
                                 <>
-                                    <NavItem tabId="planning" icon={Calendar} label="Planning" activeTab={activeTab} onClick={handleNavClick} />
                                     <NavItem tabId="tarifs" icon={Tag} label="Tarifs" activeTab={activeTab} onClick={handleNavClick} />
                                     <NavItem tabId="aide" icon={HelpCircle} label="Aide & Commandes" activeTab={activeTab} onClick={handleNavClick} />
                                 </>
@@ -2284,7 +2138,6 @@
                             {activeTab === 'facture' && renderInvoiceForm()}
                             {activeTab === 'personal' && renderPersonalDashboard()}
                             {activeTab === 'historique' && renderHistory()}
-                            {activeTab === 'planning' && renderPlanning()}
                             {activeTab === 'tarifs' && renderPrices()}
                             {activeTab === 'aide' && renderHelp()}
                             {(currentUser.role === 'admin' || currentUser.grade === 'Avocat') && activeTab === 'hr' && renderHR()}
