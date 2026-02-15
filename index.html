@@ -489,6 +489,11 @@
             
             // --- State pour la recherche clients ---
             const [clientSearch, setClientSearch] = useState('');
+            const [selectedClient, setSelectedClient] = useState(null);
+            
+            // --- State pour renommer un client (Base Clients) ---
+            const [isRenamingClient, setIsRenamingClient] = useState(false);
+            const [renameValue, setRenameValue] = useState('');
 
             const [newInvoice, setNewInvoice] = useState({ client: '', type: '', price: '' });
             const [newEmployee, setNewEmployee] = useState({ name: '', grade: '', dob: '', contractUrl: '', iban: '' });
@@ -731,7 +736,8 @@
                     if (new Date(inv.date) > new Date(client.lastVisit)) client.lastVisit = inv.date;
                     if (new Date(inv.date) < new Date(client.firstVisit)) client.firstVisit = inv.date;
                 });
-                return Object.values(stats).sort((a, b) => b.totalSpent - a.totalSpent);
+                // TRI ALPHABÉTIQUE AU LIEU DU TOTAL DÉPENSÉ
+                return Object.values(stats).sort((a, b) => a.name.localeCompare(b.name));
             }, [invoices]);
 
             const uniqueClients = useMemo(() => {
@@ -871,7 +877,7 @@
                 showNotification("Facture enregistrée !");
             };
 
-            // --- UPDATE CLIENT NAME FUNCTION ---
+            // --- UPDATE CLIENT NAME FUNCTION (Individual Invoice) ---
             const handleUpdateInvoiceClient = async (id) => {
                 if (!editingClientName.trim()) return;
                 
@@ -891,6 +897,56 @@
                 setEditingInvoiceId(null);
                 setEditingClientName('');
                 showNotification("Nom du client modifié !");
+            };
+
+            // --- RENAME GLOBAL CLIENT FUNCTION ---
+            const handleRenameClientGlobal = async () => {
+                if (!renameValue.trim() || !selectedClient) return;
+                const oldName = selectedClient.name;
+                const newName = renameValue.trim();
+
+                if (oldName === newName) {
+                    setIsRenamingClient(false);
+                    return;
+                }
+
+                // 1. Update Local State (Optimistic)
+                const updatedInvoices = invoices.map(inv => {
+                    if (inv.client.trim() === oldName) {
+                        return { ...inv, client: newName };
+                    }
+                    return inv;
+                });
+                setInvoices(updatedInvoices); // Update UI immediately
+
+                // 2. Update Firestore (Batch)
+                if (!isOffline) {
+                    try {
+                        const batch = writeBatch(db);
+                        // Find all invoices matching the old name using the IDs we already have loaded
+                        const invoicesToUpdate = invoices.filter(inv => inv.client.trim() === oldName);
+                        
+                        invoicesToUpdate.forEach(inv => {
+                            // Use docId if available, otherwise fallback to id (offline/mock)
+                            const refId = inv.docId || inv.id.toString();
+                            // Only attempt update if it looks like a valid Firestore ID (string) or handled by offline logic
+                            if (refId) {
+                                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'invoices', refId);
+                                batch.update(docRef, { client: newName });
+                            }
+                        });
+                        await batch.commit();
+                        showNotification(`Client renommé en "${newName}" avec succès.`);
+                    } catch (e) {
+                        console.error("Batch update failed", e);
+                        showNotification("Erreur sauvegarde cloud. Changement local uniquement.", "error");
+                    }
+                }
+
+                // 3. Update Selection Context
+                setSelectedClient(prev => ({ ...prev, name: newName }));
+                setIsRenamingClient(false);
+                setRenameValue('');
             };
 
             const handleDeleteInvoice = async (id) => {
@@ -1696,10 +1752,136 @@
                 </div>
             );
 
-            // --- RENDER CLIENTS (UPDATED: NO HOOKS INSIDE) ---
+            // --- RENDER CLIENTS (UPDATED: PROFILE VIEW & RENAME) ---
             const renderClients = () => {
                 // Use clientStats which is now calculated at the top level
                 const filteredClients = clientStats.filter(c => c.name.toLowerCase().includes(clientSearch.toLowerCase()));
+
+                if (selectedClient) {
+                    // Fix: Ensure we trim comparisons to catch all invoices
+                    const clientInvoices = invoices
+                        .filter(inv => inv.client.trim() === selectedClient.name)
+                        .sort((a,b) => new Date(b.date) - new Date(a.date));
+                        
+                    const averageSpend = selectedClient.visitCount > 0 ? selectedClient.totalSpent / selectedClient.visitCount : 0;
+                    
+                    let badgeColor = 'gray';
+                    let badgeText = 'Nouveau';
+                    if (selectedClient.totalSpent > 20000) { badgeColor = 'amber'; badgeText = 'VIP'; }
+                    else if (selectedClient.visitCount > 3) { badgeColor = 'blue'; badgeText = 'Régulier'; }
+
+                    return (
+                        <div className="animate-fadeIn space-y-6">
+                            <button onClick={() => { setSelectedClient(null); setIsRenamingClient(false); }} className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors mb-4 group">
+                                <ChevronLeft size={20} className="group-hover:-translate-x-1 transition-transform" /> Retour à la liste
+                            </button>
+
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                <div className="flex items-center gap-4 w-full md:w-auto">
+                                    <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br from-${theme.primaryColor}-500 to-${theme.secondaryColor || 'violet'}-600 flex items-center justify-center text-white shadow-lg shrink-0`}>
+                                        <User size={32} />
+                                    </div>
+                                    <div className="flex-1">
+                                        {isRenamingClient ? (
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    autoFocus
+                                                    className="bg-black/40 border border-gray-700 rounded-xl px-3 py-2 text-xl font-bold text-white w-full md:w-64 focus:border-indigo-500 outline-none"
+                                                    value={renameValue}
+                                                    onChange={(e) => setRenameValue(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') handleRenameClientGlobal();
+                                                        if (e.key === 'Escape') setIsRenamingClient(false);
+                                                    }}
+                                                />
+                                                <button onClick={handleRenameClientGlobal} className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg hover:bg-emerald-500 hover:text-white transition-all"><CheckCircle size={20}/></button>
+                                                <button onClick={() => setIsRenamingClient(false)} className="p-2 bg-red-500/20 text-red-400 rounded-lg hover:bg-red-500 hover:text-white transition-all"><XCircle size={20}/></button>
+                                            </div>
+                                        ) : (
+                                            <h2 className="text-3xl font-black text-white tracking-tight flex items-center gap-3 group">
+                                                {selectedClient.name}
+                                                {isBoss && (
+                                                    <button 
+                                                        onClick={() => { setRenameValue(selectedClient.name); setIsRenamingClient(true); }}
+                                                        className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-white transition-opacity p-1"
+                                                        title="Renommer ce client"
+                                                    >
+                                                        <Edit size={18} />
+                                                    </button>
+                                                )}
+                                            </h2>
+                                        )}
+                                        <p className="text-gray-400 flex items-center gap-2">Client depuis le {new Date(selectedClient.firstVisit).toLocaleDateString()}</p>
+                                    </div>
+                                </div>
+                                <StatusBadge color={badgeColor}>{badgeText}</StatusBadge>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <GlassCard className="p-6">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Total Dépensé</h3>
+                                        <div className={`p-2 bg-${theme.primaryColor}-500/20 text-${theme.primaryColor}-400 rounded-lg`}><Wallet size={24}/></div>
+                                    </div>
+                                    <p className="text-3xl font-black text-white">${selectedClient.totalSpent.toLocaleString()}</p>
+                                </GlassCard>
+                                <GlassCard className="p-6">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Visites</h3>
+                                        <div className="p-2 bg-blue-500/20 text-blue-400 rounded-lg"><History size={24}/></div>
+                                    </div>
+                                    <p className="text-3xl font-black text-white">{selectedClient.visitCount}</p>
+                                </GlassCard>
+                                <GlassCard className="p-6">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Panier Moyen</h3>
+                                        <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg"><Calculator size={24}/></div>
+                                    </div>
+                                    <p className="text-3xl font-black text-white">${averageSpend.toFixed(0)}</p>
+                                </GlassCard>
+                            </div>
+
+                            <GlassCard className="overflow-hidden">
+                                <div className="p-6 border-b border-gray-800 bg-gray-900/50 flex justify-between items-center">
+                                    <h3 className="font-bold text-white">Historique des interventions</h3>
+                                    <span className="text-xs text-gray-500">{clientInvoices.length} factures trouvées</span>
+                                </div>
+                                <div className="overflow-auto custom-scrollbar max-h-[500px]">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-gray-900/50 text-xs text-gray-500 uppercase sticky top-0">
+                                            <tr>
+                                                <th className="p-4">Date</th>
+                                                <th className="p-4">Prestation</th>
+                                                <th className="p-4">Mécanicien</th>
+                                                <th className="p-4 text-right">Montant</th>
+                                                <th className="p-4 text-center">Reçu</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-800">
+                                            {clientInvoices.length > 0 ? (
+                                                clientInvoices.map(inv => (
+                                                    <tr key={inv.id} className="hover:bg-white/5 transition-colors">
+                                                        <td className="p-4 text-gray-400 text-sm">{new Date(inv.date).toLocaleDateString()}</td>
+                                                        <td className="p-4"><StatusBadge color="gray">{inv.type}</StatusBadge></td>
+                                                        <td className="p-4 text-white">{inv.employeeName}</td>
+                                                        <td className="p-4 text-right font-mono text-white font-bold">${inv.price.toLocaleString()}</td>
+                                                        <td className="p-4 text-center">
+                                                            <button onClick={() => generateInvoicePDF(inv, theme)} className="p-2 bg-gray-800 rounded-lg text-gray-400 hover:text-white transition-all" title="Télécharger PDF">
+                                                                <Download size={16}/>
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            ) : (
+                                                <tr><td colSpan="5" className="p-8 text-center text-gray-500 italic">Aucune facture trouvée pour ce nom exact.</td></tr>
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </GlassCard>
+                        </div>
+                    );
+                }
 
                 return (
                     <div className="animate-fadeIn h-full flex flex-col">
@@ -1727,9 +1909,7 @@
                                         <tr className="text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
                                             <th className="p-5">Client</th>
                                             <th className="p-5 text-center">Statut</th>
-                                            <th className="p-5 text-center">Visites</th>
-                                            <th className="p-5 text-right">Total Dépensé</th>
-                                            <th className="p-5 text-right">Dernière Visite</th>
+                                            <th className="p-5 text-right">Profil</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-800/50">
@@ -1741,29 +1921,24 @@
                                             else if (client.visitCount > 3) { badgeColor = 'blue'; badgeText = 'Régulier'; }
 
                                             return (
-                                                <tr key={idx} className="hover:bg-white/5 transition-colors">
+                                                <tr key={idx} onClick={() => setSelectedClient(client)} className="hover:bg-white/5 transition-colors cursor-pointer group">
                                                     <td className="p-5">
-                                                        <div className="font-bold text-white text-lg">{client.name}</div>
-                                                        <div className="text-xs text-gray-500">Client depuis le {new Date(client.firstVisit).toLocaleDateString()}</div>
+                                                        <div className="font-bold text-white text-lg group-hover:text-indigo-400 transition-colors">{client.name}</div>
                                                     </td>
                                                     <td className="p-5 text-center">
                                                         <StatusBadge color={badgeColor}>{badgeText}</StatusBadge>
                                                     </td>
-                                                    <td className="p-5 text-center font-mono text-gray-300">
-                                                        {client.visitCount}
-                                                    </td>
-                                                    <td className="p-5 text-right font-mono text-emerald-400 font-bold">
-                                                        ${client.totalSpent.toLocaleString()}
-                                                    </td>
-                                                    <td className="p-5 text-right text-sm text-gray-400">
-                                                        {new Date(client.lastVisit).toLocaleDateString()}
+                                                    <td className="p-5 text-right">
+                                                        <button className="p-2 bg-gray-800 rounded-lg text-gray-400 group-hover:text-white group-hover:bg-indigo-600 transition-all">
+                                                            <ChevronRight size={16} />
+                                                        </button>
                                                     </td>
                                                 </tr>
                                             );
                                         })}
                                         {filteredClients.length === 0 && (
                                             <tr>
-                                                <td colSpan="5" className="p-8 text-center text-gray-500 italic">Aucun client trouvé.</td>
+                                                <td colSpan="3" className="p-8 text-center text-gray-500 italic">Aucun client trouvé.</td>
                                             </tr>
                                         )}
                                     </tbody>
