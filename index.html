@@ -130,11 +130,11 @@
 
         const INITIAL_CONFIG = { 
             services: [
-                { id: 'srv_repair', name: 'Réparation', costPercent: 50 },
-                { id: 'srv_custom', name: 'Custom', costPercent: 20 },
-                { id: 'srv_clean', name: 'Nettoyage', costPercent: 0 },
-                { id: 'srv_tow', name: 'Dépannage', costPercent: 0 },
-                { id: 'srv_other', name: 'Autre', costPercent: 0 }
+                { id: 'srv_repair', name: 'Réparation', costPercent: 50, bonusPercent: null },
+                { id: 'srv_custom', name: 'Custom', costPercent: 20, bonusPercent: null },
+                { id: 'srv_clean', name: 'Nettoyage', costPercent: 0, bonusPercent: null },
+                { id: 'srv_tow', name: 'Dépannage', costPercent: 0, bonusPercent: null },
+                { id: 'srv_other', name: 'Autre', costPercent: 0, bonusPercent: null }
             ]
         };
 
@@ -855,7 +855,20 @@
                 const price = parseFloat(newInvoice.price);
                 const metrics = calculateInvoiceMetrics(newInvoice.type, price);
                 const gradeInfo = grades.find(g => g.name === currentUser.grade);
-                const bonus = (metrics.netProfit > 0 && gradeInfo) ? (metrics.netProfit * gradeInfo.primePercent / 100) : 0;
+                
+                // --- NOUVELLE LOGIQUE DE PRIME ---
+                // 1. Chercher la config du service
+                const serviceConfig = (config.services || []).find(s => s.name === newInvoice.type);
+                
+                // 2. Déterminer le pourcentage de prime
+                // Si le service a un bonusPercent défini (et non vide), on l'utilise. Sinon, on utilise celui du grade.
+                let bonusRate = gradeInfo ? gradeInfo.primePercent : 0;
+                if (serviceConfig && serviceConfig.bonusPercent !== undefined && serviceConfig.bonusPercent !== "" && serviceConfig.bonusPercent !== null) {
+                    bonusRate = parseFloat(serviceConfig.bonusPercent);
+                }
+
+                // 3. Calculer la prime sur le Bénéfice Net
+                const bonus = (metrics.netProfit > 0) ? (metrics.netProfit * bonusRate / 100) : 0;
 
                 const invoiceEntry = {
                     date: new Date().toISOString(),
@@ -2468,7 +2481,7 @@
                                             placeholder="Nom prestation"
                                         />
                                     </div>
-                                    <div className="w-1/3 relative">
+                                    <div className="w-1/4 relative">
                                         <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Coût / Taxe (%)</label>
                                         <input 
                                             type="number" 
@@ -2480,6 +2493,22 @@
                                             }}
                                             className={`bg-black/40 border border-gray-700 rounded-lg px-4 py-2 text-white w-full pr-8 focus:border-emerald-500 outline-none font-mono`}
                                             placeholder="%"
+                                        />
+                                        <span className="absolute right-3 top-8 text-gray-500 pointer-events-none">%</span>
+                                    </div>
+                                    <div className="w-1/4 relative">
+                                        <label className="text-xs text-gray-500 uppercase font-bold mb-1 block">Prime / Bonus (%)</label>
+                                        <input 
+                                            type="number" 
+                                            value={service.bonusPercent ?? ''} 
+                                            onChange={(e) => {
+                                                const newServices = [...config.services];
+                                                // Si vide, on met null pour utiliser le grade
+                                                newServices[index].bonusPercent = e.target.value === '' ? null : parseFloat(e.target.value);
+                                                saveConfig('services', newServices);
+                                            }}
+                                            className={`bg-black/40 border border-gray-700 rounded-lg px-4 py-2 text-white w-full pr-8 focus:border-emerald-500 outline-none font-mono placeholder-gray-600`}
+                                            placeholder="Grade"
                                         />
                                         <span className="absolute right-3 top-8 text-gray-500 pointer-events-none">%</span>
                                     </div>
@@ -2502,7 +2531,7 @@
                             
                             <button 
                                 onClick={() => {
-                                    const newServices = [...(config.services || []), { id: `srv_${Date.now()}`, name: 'Nouvelle Prestation', costPercent: 0 }];
+                                    const newServices = [...(config.services || []), { id: `srv_${Date.now()}`, name: 'Nouvelle Prestation', costPercent: 0, bonusPercent: null }];
                                     saveConfig('services', newServices);
                                 }}
                                 className="w-full py-3 mt-4 border-2 border-dashed border-gray-700 rounded-xl text-gray-400 hover:text-white hover:border-emerald-500 hover:bg-emerald-500/10 flex items-center justify-center gap-2 transition-all font-bold"
@@ -2589,7 +2618,6 @@
                     </GlassCard>
                 </div>
             );
-
 
             if (!currentUser) return renderAuthScreen;
 
