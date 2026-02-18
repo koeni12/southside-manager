@@ -139,12 +139,12 @@
         };
 
         const INITIAL_GRADES = [
-            { id: 'g1', name: 'Patron', primePercent: 20, maxSalary: 5000, quota: 25 },
-            { id: 'g2', name: 'Co-patron', primePercent: 20, maxSalary: 4000, quota: 25 },
+            { id: 'g1', name: 'Patron', primePercent: 20, maxSalary: 5000, quota: 0 },
+            { id: 'g2', name: 'Co-patron', primePercent: 20, maxSalary: 4000, quota: 0 },
             { id: 'g_avocat', name: 'Avocat', primePercent: 10, maxSalary: 3500, quota: 0 },
-            { id: 'g3', name: 'Chef d\'équipe', primePercent: 20, maxSalary: 3000, quota: 25 },
-            { id: 'g4', name: 'Mécano', primePercent: 15, maxSalary: 2000, quota: 25 },
-            { id: 'g5', name: 'Apprenti', primePercent: 10, maxSalary: 1000, quota: 25 },
+            { id: 'g3', name: 'Chef d\'équipe', primePercent: 20, maxSalary: 3000, quota: 0 },
+            { id: 'g4', name: 'Mécano', primePercent: 15, maxSalary: 2000, quota: 0 },
+            { id: 'g5', name: 'Apprenti', primePercent: 10, maxSalary: 1000, quota: 0 },
         ];
         const INITIAL_EMPLOYEES = [
             { id: 'e1', name: 'Edy Thomas', grade: 'Co-patron', role: 'admin', password: '123', dob: '1995-05-20', contractUrl: 'https://docs.google.com', iban: 'LS89 3000 4000 1234 5678' },
@@ -161,10 +161,7 @@
         };
         
         const INITIAL_GARAGE_PRICES = [
-            { category: 'Entretien', items: [{ name: 'Réparation Moteur', price: 250 }, { name: 'Réparation Carrosserie', price: 150 }, { name: 'Nettoyage Complet', price: 80 }, { name: 'Dépannage / Remorquage', price: 200 }] },
-            { category: 'Performance', items: [{ name: 'Moteur Niveau 1', price: 2500 }, { name: 'Moteur Niveau 2', price: 5000 }, { name: 'Moteur Niveau 3', price: 8500 }, { name: 'Transmission Sport', price: 3000 }, { name: 'Freins Course', price: 2800 }, { name: 'Turbo', price: 6000 }] },
-            { category: 'Modification Extérieur', items: [{ name: 'Peinture Complète', price: 1200 }, { name: 'Kit Carrosserie', price: 3500 }, { name: 'Néons (Kit complet)', price: 1500 }, { name: 'Jantes Custom', price: 1800 }, { name: 'Vitres Teintées', price: 500 }, { name: 'Livrée / Stickers', price: 2500 }] },
-            { category: 'Modification Intérieur', items: [{ name: 'Tableau de bord', price: 1000 }, { name: 'Sièges / Sellerie', price: 1500 }, { name: 'Volant Racing', price: 600 }, { name: 'Arceau Cage', price: 2000 }, { name: 'Compteurs Custom', price: 800 }] }
+            { category: 'Entretien', items: [{ name: 'Réparation Moteur', price: 250 }, { name: 'Réparation Carrosserie', price: 150 }, { name: 'Nettoyage Complet', price: 80 }, { name: 'Dépannage / Remorquage', price: 200 }] }
         ];
         
         const INITIAL_INVOICES = [
@@ -483,6 +480,9 @@
             const [loginForm, setLoginForm] = useState({ username: '', password: '' });
             const [loginError, setLoginError] = useState('');
             
+            // --- State pour la fonctionnalité "Rester connecté" ---
+            const [stayConnected, setStayConnected] = useState(false);
+            
             // --- States pour l'édition des factures ---
             const [editingInvoiceId, setEditingInvoiceId] = useState(null);
             const [editingClientName, setEditingClientName] = useState('');
@@ -505,6 +505,11 @@
             const [confirmFire, setConfirmFire] = useState(false); 
             const [confirmReset, setConfirmReset] = useState(false);
             const [notification, setNotification] = useState(null);
+
+            // --- ETATS POUR LE SERVICE (Pointage) ---
+            const [serviceLogs, setServiceLogs] = useState([]);
+            const [isServiceActive, setIsServiceActive] = useState(false);
+            const [serviceStartTime, setServiceStartTime] = useState(null);
 
             // GLOBAL PERMISSIONS
             const isBoss = currentUser ? ['Patron', 'Co-patron'].includes(currentUser.grade) : false;
@@ -537,6 +542,100 @@
                 return () => unsubscribe();
             }, []);
 
+            // --- AUTO-LOGIN EFFECT (RESTER CONNECTÉ) ---
+            useEffect(() => {
+                const savedUserId = localStorage.getItem('southside_session_user');
+                // On attend que la liste des employés soit chargée et qu'aucun utilisateur ne soit connecté
+                if (savedUserId && !currentUser && employees.length > 0) {
+                    const user = employees.find(e => e.id === savedUserId);
+                    if (user) {
+                        setCurrentUser(user);
+                        setDashboardTargetUser(user);
+                        
+                        // Redirection intelligente selon le rôle
+                        if (user.role === 'admin') setActiveTab('dashboard');
+                        else if (user.grade === 'Avocat') setActiveTab('hr'); 
+                        else setActiveTab('personal');
+                        
+                        showNotification(`Session restaurée. Bon retour ${user.name.split(' ')[0]} !`);
+                    }
+                }
+            }, [employees, currentUser]);
+
+            // --- LOGIQUE DE SERVICE (AUTO-STOP & HEARTBEAT) ---
+            
+            // Helper pour mettre à jour le statut en ligne de l'employé
+            const updateServiceStatus = async (empId, status) => {
+                if (!empId) return;
+                
+                if (isOffline) {
+                    setEmployees(prev => prev.map(e => e.id === empId ? { ...e, isServiceActive: status } : e));
+                } else {
+                    const emp = employees.find(e => e.id === empId);
+                    if (emp) {
+                        const docRefId = emp.docId || emp.id;
+                        try {
+                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', docRefId), { isServiceActive: status });
+                        } catch (e) {
+                            console.error("Erreur maj statut service:", e);
+                        }
+                    }
+                }
+            };
+
+            // A. Initialisation et Récupération au chargement
+            useEffect(() => {
+                // Charger les logs existants
+                const savedLogs = localStorage.getItem('southside_service_logs');
+                if (savedLogs) setServiceLogs(JSON.parse(savedLogs));
+
+                // Vérifier si une session a été interrompue brutalement (fermeture onglet)
+                const wasActive = localStorage.getItem('southside_service_is_active') === 'true';
+                const lastHeartbeat = parseInt(localStorage.getItem('southside_service_heartbeat'));
+                const savedStart = parseInt(localStorage.getItem('southside_service_start'));
+                const sessionUser = localStorage.getItem('southside_session_user');
+
+                if (wasActive && lastHeartbeat && savedStart) {
+                    // On clôture la session précédente à la dernière heure connue (lastHeartbeat)
+                    const recoveredLog = {
+                        id: Date.now(),
+                        employeeId: sessionUser || 'unknown',
+                        startTime: savedStart,
+                        endTime: lastHeartbeat,
+                        duration: lastHeartbeat - savedStart,
+                        date: new Date(savedStart).toISOString()
+                    };
+
+                    setServiceLogs(prev => {
+                        const newLogs = [...prev, recoveredLog];
+                        localStorage.setItem('southside_service_logs', JSON.stringify(newLogs));
+                        return newLogs;
+                    });
+
+                    // Si on a l'ID user, on remet son statut à false dans la BDD car il n'est plus là
+                    if (sessionUser) {
+                        updateServiceStatus(sessionUser, false);
+                    }
+
+                    // Nettoyage
+                    localStorage.removeItem('southside_service_is_active');
+                    localStorage.removeItem('southside_service_start');
+                    localStorage.removeItem('southside_service_heartbeat');
+                    
+                    showNotification("Service clôturé automatiquement suite à la fermeture de la page.", "warning");
+                }
+            }, []);
+
+            // B. Heartbeat (Sauvegarde l'état toutes les 5 sec pour permettre l'auto-stop)
+            useEffect(() => {
+                if (isServiceActive && serviceStartTime) {
+                    const interval = setInterval(() => {
+                        localStorage.setItem('southside_service_heartbeat', Date.now().toString());
+                    }, 5000);
+                    return () => clearInterval(interval);
+                }
+            }, [isServiceActive, serviceStartTime]);
+
             // 2. Data Subscriptions & Offline Fallback with LOCAL STORAGE
             useEffect(() => {
                 // If offline mode is forced (e.g. auth failed), load local
@@ -560,6 +659,8 @@
                     setConfig(loadLocal('config', INITIAL_CONFIG));
                     setTheme(loadLocal('theme', INITIAL_THEME));
                     setCustomMessages(loadLocal('customMessages', INITIAL_MESSAGES));
+                    // Charger les logs en mode offline si pas déjà fait
+                    if(!serviceLogs.length) setServiceLogs(loadLocal('service_logs', []));
                     return;
                 }
 
@@ -643,6 +744,7 @@
             // --- LOCAL STORAGE EFFECTS FOR OFFLINE PERSISTENCE ---
             useEffect(() => { if (isOffline) localStorage.setItem('southside_invoices', JSON.stringify(invoices)); }, [invoices, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_employees', JSON.stringify(employees)); }, [employees, isOffline]);
+            useEffect(() => { if (isOffline) localStorage.setItem('southside_service_logs', JSON.stringify(serviceLogs)); }, [serviceLogs, isOffline]); // Ajout logs
             useEffect(() => { if (isOffline) localStorage.setItem('southside_contracts', JSON.stringify(contracts)); }, [contracts, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_applications', JSON.stringify(applications)); }, [applications, isOffline]);
             useEffect(() => { if (isOffline) localStorage.setItem('southside_grades', JSON.stringify(grades)); }, [grades, isOffline]);
@@ -682,10 +784,20 @@
 
                 // Use sortedEmployees instead of employees to maintain grade order
                 const employeeStats = sortedEmployees.map(emp => {
-                const empInvoices = weeklyInvoices.filter(inv => inv.employeeId === emp.id);
-                const revenue = empInvoices.reduce((acc, curr) => acc + curr.price, 0);
-                const bonusTheorique = empInvoices.reduce((acc, curr) => acc + curr.bonus, 0);
-                return { ...emp, invoiceCount: empInvoices.length, revenue, bonusTheorique };
+                    const empInvoices = weeklyInvoices.filter(inv => inv.employeeId === emp.id);
+                    const revenue = empInvoices.reduce((acc, curr) => acc + curr.price, 0);
+                    // AJOUT DU CALCUL DU PROFIT PAR EMPLOYÉ
+                    const profit = empInvoices.reduce((acc, curr) => acc + (curr.profit || 0), 0);
+                    const bonusTheorique = empInvoices.reduce((acc, curr) => acc + curr.bonus, 0);
+                    
+                    // --- NOUVEAU : CALCUL DES HEURES PAR EMPLOYÉ ---
+                    const empLogs = serviceLogs.filter(log => {
+                        const logDate = new Date(log.date);
+                        return log.employeeId === emp.id && logDate >= start && logDate <= end;
+                    });
+                    const totalDurationMs = empLogs.reduce((acc, log) => acc + log.duration, 0);
+
+                    return { ...emp, invoiceCount: empInvoices.length, revenue, profit, bonusTheorique, totalDurationMs };
                 });
 
                 const clientStats = {};
@@ -771,6 +883,13 @@
                 );
 
                 if (user) {
+                    // SAUVEGARDE DE SESSION
+                    if (stayConnected) {
+                        localStorage.setItem('southside_session_user', user.id);
+                    } else {
+                        localStorage.removeItem('southside_session_user');
+                    }
+
                     setCurrentUser(user);
                     setDashboardTargetUser(user); 
                     setLoginError('');
@@ -786,9 +905,67 @@
             };
 
             const handleLogout = async () => {
+                // Si en service, on coupe proprement avant de partir
+                if (isServiceActive) handleToggleService();
+                
+                localStorage.removeItem('southside_session_user'); // Nettoyage de la session
                 setCurrentUser(null);
                 setDashboardTargetUser(null);
                 setLoginForm({ username: '', password: '' });
+                setStayConnected(false);
+            };
+
+            const handleToggleService = async () => {
+                if (isServiceActive) {
+                    // ARRET DU SERVICE
+                    const endTime = Date.now();
+                    const newLog = {
+                        id: Date.now(),
+                        employeeId: currentUser.id,
+                        startTime: serviceStartTime,
+                        endTime: endTime,
+                        duration: endTime - serviceStartTime,
+                        date: new Date().toISOString()
+                    };
+                    
+                    const newLogs = [...serviceLogs, newLog];
+                    setServiceLogs(newLogs);
+                    setIsServiceActive(false);
+                    setServiceStartTime(null);
+                    
+                    // Mise à jour BDD
+                    await updateServiceStatus(currentUser.id, false);
+                    
+                    // Nettoyage LocalStorage
+                    localStorage.setItem('southside_service_logs', JSON.stringify(newLogs));
+                    localStorage.removeItem('southside_service_is_active');
+                    localStorage.removeItem('southside_service_start');
+                    localStorage.removeItem('southside_service_heartbeat');
+                    
+                    showNotification("Fin de service enregistrée.");
+                } else {
+                    // PRISE DE SERVICE
+                    const start = Date.now();
+                    setIsServiceActive(true);
+                    setServiceStartTime(start);
+                    
+                    // Mise à jour BDD
+                    await updateServiceStatus(currentUser.id, true);
+                    
+                    // Init LocalStorage pour Auto-stop
+                    localStorage.setItem('southside_service_is_active', 'true');
+                    localStorage.setItem('southside_service_start', start.toString());
+                    localStorage.setItem('southside_service_heartbeat', start.toString());
+                    
+                    showNotification("Prise de service validée. Bon courage !");
+                }
+            };
+
+            const formatDuration = (ms) => {
+                const totalMinutes = Math.floor(ms / 60000);
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+                return `${hours}h ${minutes.toString().padStart(2, '0')}`;
             };
 
             const showNotification = (msg, type = 'success') => {
@@ -1261,11 +1438,28 @@
                                         </div>
                                     </div>
                                     {loginError && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg flex items-center gap-2 text-red-400 text-sm"><AlertCircle size={16} />{loginError}</div>}
+                                    
+                                    {/* CHECKBOX RESTER CONNECTÉ */}
+                                    <div className="flex items-center gap-3 pl-1 cursor-pointer w-fit" onClick={() => setStayConnected(!stayConnected)}>
+                                        <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${stayConnected ? `bg-${theme.primaryColor}-500 border-${theme.primaryColor}-500` : 'border-gray-600 bg-black/40 hover:border-gray-500'}`}>
+                                            {stayConnected && <CheckCircle size={14} className="text-white" strokeWidth={3} />}
+                                        </div>
+                                        <label className="text-sm text-gray-400 select-none cursor-pointer font-medium hover:text-white transition-colors">Rester connecté</label>
+                                    </div>
+
                                     <Button type="submit" className="w-full py-4 text-lg" color={theme.primaryColor}>Se connecter</Button>
                                 </form>
-                                <div className="mt-6 text-center border-t border-gray-800 pt-4">
-                                    <button onClick={() => setAuthMode('apply')} className={`text-${theme.primaryColor}-400 hover:text-white text-sm font-bold transition-colors`}>
-                                        Candidature Spontanée (Postuler)
+                                
+                                <div className="mt-8 pt-6 border-t border-gray-800/50">
+                                    <p className="text-gray-500 text-xs text-center mb-3 uppercase tracking-wider font-bold">Pas encore employé ?</p>
+                                    <button 
+                                        onClick={() => setAuthMode('apply')} 
+                                        className={`w-full py-3.5 rounded-xl border-2 border-dashed border-${theme.primaryColor}-500/30 hover:border-${theme.primaryColor}-500 text-${theme.primaryColor}-400 hover:text-white hover:bg-${theme.primaryColor}-500/10 transition-all duration-300 font-bold text-sm flex items-center justify-center gap-2 group`}
+                                    >
+                                        <div className={`p-1.5 rounded-lg bg-${theme.primaryColor}-500/20 group-hover:bg-${theme.primaryColor}-500 group-hover:text-white transition-colors`}>
+                                            <Briefcase size={16} />
+                                        </div>
+                                        Déposer une candidature
                                     </button>
                                 </div>
                             </>
@@ -1312,14 +1506,38 @@
 
                 const myInvoices = weeklyStats.weeklyInvoices.filter(inv => inv.employeeId === targetUser.id);
                 const myRevenue = myInvoices.reduce((acc, curr) => acc + curr.price, 0);
+                // Calcul du bénéfice net personnel
+                const myProfit = myInvoices.reduce((acc, curr) => acc + (curr.profit || 0), 0);
                 const myBonusTheorique = myInvoices.reduce((acc, curr) => acc + curr.bonus, 0);
+                
                 const gradeInfo = grades.find(g => g.name === targetUser.grade);
-                const quota = gradeInfo ? gradeInfo.quota : 25;
-                const invoiceCount = myInvoices.length;
-                const progress = quota > 0 ? Math.min((invoiceCount / quota) * 100, 100) : 100;
-                const isComplete = progress >= 100;
                 const maxSalary = gradeInfo ? gradeInfo.maxSalary : 0;
+                
+                // NOUVELLE LOGIQUE DE QUOTA : 1.5 x Salaire Max en Profit
+                const targetProfit = maxSalary * 1.5;
+                const progress = targetProfit > 0 ? Math.min((myProfit / targetProfit) * 100, 100) : 100;
+                
+                const isComplete = progress >= 100;
                 const earnedSalary = maxSalary * (progress / 100);
+                
+                // CALCUL DES HEURES SEMAINE
+                const startOfWeek = getStartOfWeek(selectedDate);
+                const endOfWeek = getEndOfWeek(selectedDate);
+                
+                // On filtre les logs de la semaine pour l'utilisateur
+                const weeklyLogs = serviceLogs.filter(log => {
+                    const logDate = new Date(log.date);
+                    return log.employeeId === targetUser.id && logDate >= startOfWeek && logDate <= endOfWeek;
+                });
+                
+                // Somme des durées terminées
+                let totalDurationMs = weeklyLogs.reduce((acc, log) => acc + log.duration, 0);
+                
+                // Si c'est l'utilisateur actuel et qu'il est en service, on ajoute le temps en cours
+                if (isViewingSelf && isServiceActive && serviceStartTime) {
+                    totalDurationMs += (Date.now() - serviceStartTime);
+                }
+
                 const myActivityData = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((day, index) => {
                     const val = myInvoices.filter(i => new Date(i.date).getDay() === (index + 1) % 7).reduce((acc, curr) => acc + curr.price, 0);
                     return { name: day, ca: val };
@@ -1328,7 +1546,8 @@
                 return (
                     <div className="animate-fadeIn space-y-8">
                         <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} themeColor={theme.primaryColor} />
-                        <div className="flex justify-between items-end">
+                        
+                        <div className="flex flex-col md:flex-row justify-between items-end gap-4">
                             <div>
                                 <h2 className="text-3xl font-black text-white tracking-tight flex items-center gap-3">
                                     {isViewingSelf ? `Bonjour, ${targetUser.name.split(' ')[0]} 👋` : `Fiche de ${targetUser.name}`}
@@ -1336,31 +1555,77 @@
                                 </h2>
                                 <p className="text-gray-400">Performances pour la semaine sélectionnée.</p>
                             </div>
-                            <div className="text-right">
-                                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Grade Actuel</div>
-                                <StatusBadge color={getGradeColor(targetUser.grade)}>{targetUser.grade}</StatusBadge>
-                            </div>
+                            
+                            {/* BOUTON PRISE DE SERVICE (Uniquement pour soi-même) */}
+                            {isViewingSelf && (
+                                <div className="flex items-center gap-4 bg-gray-800/50 p-2 rounded-2xl border border-white/5">
+                                    <div className="text-right px-2">
+                                        <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Statut Service</div>
+                                        <div className={`font-bold ${isServiceActive ? 'text-emerald-400' : 'text-red-400'}`}>
+                                            {isServiceActive ? 'EN SERVICE' : 'HORS SERVICE'}
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={handleToggleService}
+                                        className={`px-6 py-3 rounded-xl font-bold shadow-lg transition-all flex items-center gap-2 ${
+                                            isServiceActive 
+                                            ? 'bg-red-500 hover:bg-red-600 text-white shadow-red-500/20' 
+                                            : 'bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20'
+                                        }`}
+                                    >
+                                        {isServiceActive ? <WifiOff size={20}/> : <Wifi size={20}/>}
+                                        {isServiceActive ? 'Fin de service' : 'Prise de service'}
+                                    </button>
+                                </div>
+                            )}
+                            
+                            {!isViewingSelf && (
+                                <div className="text-right">
+                                    <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Grade Actuel</div>
+                                    <StatusBadge color={getGradeColor(targetUser.grade)}>{targetUser.grade}</StatusBadge>
+                                </div>
+                            )}
                         </div>
-                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                            {/* CARTE HEURES */}
+                            <GlassCard className="p-6 relative overflow-hidden bg-gradient-to-br from-gray-900 to-gray-800">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div>
+                                        <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Heures Semaine</h3>
+                                        <p className="text-3xl font-black text-white mt-1">{formatDuration(totalDurationMs)}</p>
+                                    </div>
+                                    <div className={`p-2 rounded-lg bg-blue-500/20 text-blue-400`}>
+                                        <Clock size={24} />
+                                    </div>
+                                </div>
+                                {isServiceActive && isViewingSelf && (
+                                    <div className="flex items-center gap-2 text-xs text-emerald-400 animate-pulse">
+                                        <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
+                                        Compteur en cours...
+                                    </div>
+                                )}
+                            </GlassCard>
+
                             <GlassCard className="p-6 relative overflow-hidden">
                                 <div className="flex justify-between items-start mb-4">
                                     <div>
-                                        <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Objectif Hebdo</h3>
+                                        <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider">Objectif Rentabilité</h3>
                                         <div className="flex items-baseline gap-1 mt-1">
-                                            <span className={`text-3xl font-black ${isComplete ? 'text-emerald-400' : 'text-white'}`}>{invoiceCount}</span>
-                                            {quota > 0 && <span className="text-gray-500">/ {quota} factures</span>}
+                                            <span className={`text-2xl font-black ${isComplete ? 'text-emerald-400' : 'text-white'}`}>${myProfit.toFixed(0)}</span>
+                                            <span className="text-gray-500 text-sm">/ ${targetProfit.toFixed(0)}</span>
                                         </div>
                                     </div>
-                                    <div className={`p-2 rounded-lg ${isComplete ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                                    <div className={`p-2 rounded-lg ${isComplete ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
                                         <Target size={24} />
                                     </div>
                                 </div>
-                                {quota > 0 && (
+                                {targetProfit > 0 && (
                                     <>
                                         <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                                            <div className={`h-full transition-all duration-1000 ${isComplete ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{width: `${progress}%`}}></div>
+                                            <div className={`h-full transition-all duration-1000 ${isComplete ? 'bg-emerald-500' : 'bg-amber-500'}`} style={{width: `${progress}%`}}></div>
                                         </div>
-                                        <p className="text-xs text-gray-500 mt-2 text-right">{Math.round(progress)}% complété</p>
+                                        <p className="text-xs text-gray-500 mt-2 text-right">{Math.round(progress)}% validé</p>
                                     </>
                                 )}
                             </GlassCard>
@@ -1372,7 +1637,7 @@
                                     </div>
                                 </div>
                                 <p className="text-3xl font-black text-white">${myRevenue.toLocaleString()}</p>
-                                <p className="text-xs text-gray-500 mt-1">Généré pour l'entreprise</p>
+                                <p className="text-xs text-gray-500 mt-1">Total facturé</p>
                             </GlassCard>
                              <GlassCard className={`p-6 border-l-4 ${isComplete ? 'border-l-emerald-500' : 'border-l-amber-500'}`}>
                                 <div className="flex justify-between items-start mb-2">
@@ -1384,7 +1649,7 @@
                                 <p className="text-3xl font-black text-white">${(earnedSalary + (isComplete ? myBonusTheorique : 0)).toLocaleString()}</p>
                                 {!isComplete && (
                                     <div className="mt-2 flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 px-2 py-1 rounded">
-                                        <Lock size={12} /><span>Prime de ${myBonusTheorique} bloquée</span>
+                                        <Lock size={12} /><span>Prime de ${myBonusTheorique.toFixed(0)} bloquée</span>
                                     </div>
                                 )}
                                 {isComplete && (
@@ -2144,8 +2409,16 @@
                                             {sortedEmployees.map((emp) => (
                                                 <tr key={emp.id} className="hover:bg-white/5 transition-colors group">
                                                     <td className="p-4 pl-6">
-                                                        <div className="font-bold text-white">{emp.name}</div>
-                                                        <div className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={10} /> Né(e) le {emp.dob ? new Date(emp.dob).toLocaleDateString() : 'N/A'}</div>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="relative">
+                                                                <div className={`w-3 h-3 rounded-full ${emp.isServiceActive ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]' : 'bg-red-500/30'}`}></div>
+                                                                {emp.isServiceActive && <div className="absolute inset-0 w-3 h-3 rounded-full bg-emerald-500 animate-ping opacity-75"></div>}
+                                                            </div>
+                                                            <div>
+                                                                <div className="font-bold text-white">{emp.name}</div>
+                                                                <div className="text-xs text-gray-500 flex items-center gap-1"><Calendar size={10} /> Né(e) le {emp.dob ? new Date(emp.dob).toLocaleDateString() : 'N/A'}</div>
+                                                            </div>
+                                                        </div>
                                                     </td>
                                                     <td className="p-4"><StatusBadge color={getGradeColor(emp.grade)}>{emp.grade}</StatusBadge></td>
                                                     <td className="p-4">
@@ -2333,7 +2606,7 @@
                     <WeekNavigator selectedDate={selectedDate} onPrev={handlePrevWeek} onNext={handleNextWeek} themeColor={theme.primaryColor} />
                     <div className="mb-8">
                         <h2 className="text-3xl font-black text-white tracking-tight">Salaires & Primes</h2>
-                        <p className="text-gray-400">Suivi des objectifs de la semaine sélectionnée.</p>
+                        <p className="text-gray-400">Suivi basé sur la rentabilité nette (Objectif = 1.5x Salaire).</p>
                     </div>
                     {/* MODIFICATION ICI : Ajout du wrapper overflow-x-auto et min-width sur la table */}
                     <GlassCard className="overflow-hidden flex flex-col">
@@ -2343,7 +2616,8 @@
                                 <thead>
                                     <tr className="bg-gray-900/50 border-b border-gray-800 text-gray-500 text-xs uppercase tracking-wider">
                                         <th className="p-5">Employé</th>
-                                        <th className="p-5 w-1/3">Progression Quota</th>
+                                        <th className="p-5 text-center">Heures</th>
+                                        <th className="p-5 w-1/3">Rentabilité (Net)</th>
                                         <th className="p-5 text-right">Salaire (Proportionnel)</th>
                                         <th className="p-5 text-right">Prime (Conditionnelle)</th>
                                         <th className="p-5 text-right">Total à Payer</th>
@@ -2353,12 +2627,14 @@
                                 <tbody className="divide-y divide-gray-800/50">
                                     {weeklyStats.employeeStats.filter(e => e.grade !== 'Avocat').map(emp => { 
                                         const gradeInfo = grades.find(g => g.name === emp.grade);
-                                        const quota = gradeInfo ? gradeInfo.quota : 25;
-                                        // CORRECTION ICI : Utilisation de la variable quota au lieu de 25 en dur
-                                        const progress = quota > 0 ? Math.min((emp.invoiceCount / quota) * 100, 100) : 100;
-                                        const isComplete = progress >= 100;
                                         const maxSalary = gradeInfo ? gradeInfo.maxSalary : 0;
+                                        
+                                        // NOUVELLE LOGIQUE
+                                        const targetProfit = maxSalary * 1.5;
+                                        const progress = targetProfit > 0 ? Math.min((emp.profit / targetProfit) * 100, 100) : 100;
+                                        const isComplete = progress >= 100;
                                         const earnedSalary = maxSalary * (progress / 100);
+                                        
                                         const bonusAmount = emp.bonusTheorique;
                                         const finalBonus = isComplete ? bonusAmount : 0; 
                                         return (
@@ -2367,13 +2643,19 @@
                                                     <div className="font-bold text-white text-lg">{emp.name}</div>
                                                     <div className={`text-xs text-${theme.primaryColor}-400 font-medium uppercase tracking-wide`}>{emp.grade}</div>
                                                 </td>
+                                                <td className="p-5 text-center">
+                                                    <div className="flex items-center justify-center gap-2 text-white font-mono bg-gray-800/50 px-3 py-1.5 rounded-lg border border-gray-700">
+                                                        <Clock size={14} className={`text-${theme.primaryColor}-400`} />
+                                                        {formatDuration(emp.totalDurationMs)}
+                                                    </div>
+                                                </td>
                                                 <td className="p-5">
                                                     <div className="flex flex-col gap-2">
                                                         <div className="flex justify-between text-xs font-semibold">
-                                                            <span className={isComplete ? "text-emerald-400" : "text-gray-400"}>{emp.invoiceCount} {quota > 0 ? `/ ${quota}` : ''} factures</span>
+                                                            <span className={isComplete ? "text-emerald-400" : "text-gray-400"}>${emp.profit.toFixed(0)} <span className="text-gray-600">/ ${targetProfit.toFixed(0)}</span></span>
                                                             <span className="text-white">{Math.round(progress)}%</span>
                                                         </div>
-                                                        {quota > 0 && (
+                                                        {targetProfit > 0 && (
                                                             <div className="h-2.5 bg-gray-800 rounded-full overflow-hidden shadow-inner">
                                                                 <div className={`h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden ${isComplete ? 'bg-gradient-to-r from-emerald-500 to-teal-400' : `bg-gradient-to-r from-${theme.primaryColor}-500 to-${theme.secondaryColor || 'violet'}-500`}`} style={{width: `${progress}%`}}>
                                                                     <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
@@ -2392,7 +2674,7 @@
                                                     ) : (
                                                         <div className="flex flex-col items-end animate-fadeIn">
                                                             <div className="flex items-center gap-2 text-amber-500 font-mono opacity-80"><Lock size={14} /> +${bonusAmount.toLocaleString()}</div>
-                                                            <span className="text-[10px] text-amber-500/60 uppercase tracking-wide">Bloqué (Quota non atteint)</span>
+                                                            <span className="text-[10px] text-amber-500/60 uppercase tracking-wide">Bloqué (Objectif non atteint)</span>
                                                         </div>
                                                     )}
                                                 </td>
@@ -2551,7 +2833,6 @@
                                     <th className="p-4 pl-6">Grade</th>
                                     <th className="p-4 text-center">Prime (%)</th>
                                     <th className="p-4 text-center">Salaire Max</th>
-                                    <th className="p-4 text-center">Quota</th>
                                     <th className="p-4 text-center">Actions</th>
                                 </tr>
                             </thead>
@@ -2571,9 +2852,6 @@
                                         </td>
                                         <td className="p-4 text-center">
                                             <input type="number" value={grade.maxSalary} onChange={(e) => handleUpdateGrade(grade.id, 'maxSalary', e.target.value === '' ? 0 : parseInt(e.target.value))} className="bg-black/40 border border-gray-700 rounded-lg px-2 py-1 w-24 text-center text-emerald-400 focus:border-emerald-500 outline-none font-mono" />
-                                        </td>
-                                        <td className="p-4 text-center">
-                                            <input type="number" value={grade.quota} onChange={(e) => handleUpdateGrade(grade.id, 'quota', e.target.value === '' ? 0 : parseInt(e.target.value))} className="bg-black/40 border border-gray-700 rounded-lg px-2 py-1 w-20 text-center text-white focus:border-white outline-none font-mono" />
                                         </td>
                                         <td className="p-4 text-center">
                                             <button onClick={() => handleDeleteGrade(grade.id)} className="p-2 text-red-400 hover:text-white hover:bg-red-500/20 rounded-lg transition-colors"><Trash2 size={16} /></button>
