@@ -1,0 +1,2386 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Manager Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        :root {
+            --accent: #6366f1;
+            --accent-rgb: 99, 102, 241;
+            --accent2: #8b5cf6;
+            --surface: #0d0d14;
+            --surface2: #13131f;
+            --surface3: #1a1a2e;
+            --border: rgba(255,255,255,0.06);
+            --text: #e8e8f0;
+            --text-dim: #6b7280;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'DM Sans', sans-serif; background: var(--surface); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+        h1,h2,h3,.font-display { font-family: 'Syne', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Scrollbars */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 99px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+
+        /* Glass surfaces */
+        .glass { background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); border: 1px solid var(--border); }
+        .glass-strong { background: rgba(255,255,255,0.06); backdrop-filter: blur(30px); border: 1px solid rgba(255,255,255,0.1); }
+
+        /* Gradient mesh background */
+        .mesh-bg::before {
+            content: '';
+            position: fixed; inset: 0; z-index: 0; pointer-events: none;
+            background: 
+                radial-gradient(ellipse 60% 50% at 20% 10%, rgba(var(--accent-rgb),0.08) 0%, transparent 60%),
+                radial-gradient(ellipse 40% 40% at 80% 80%, rgba(139,92,246,0.06) 0%, transparent 60%),
+                radial-gradient(ellipse 30% 30% at 60% 30%, rgba(6,182,212,0.04) 0%, transparent 60%);
+        }
+
+        /* Sidebar */
+        .sidebar { width: 260px; flex-shrink: 0; background: var(--surface2); border-right: 1px solid var(--border); position: fixed; top:0; left:0; bottom:0; z-index:40; transition: transform 0.3s cubic-bezier(0.4,0,0.2,1); display:flex; flex-direction:column; overflow:hidden; }
+        .sidebar.closed { transform: translateX(-100%); }
+        @media(min-width:1024px){ .sidebar { position:static; transform:none !important; } }
+        .main-content { flex:1; min-width:0; margin-left:0; }
+        @media(min-width:1024px){ .main-content { margin-left:260px; } }
+
+        /* Nav items */
+        .nav-item { display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:10px; cursor:pointer; transition:all 0.2s; color:var(--text-dim); font-size:14px; font-weight:500; position:relative; }
+        .nav-item:hover { background:rgba(255,255,255,0.05); color:var(--text); }
+        .nav-item.active { background:rgba(var(--accent-rgb),0.15); color:var(--text); }
+        .nav-item.active::before { content:''; position:absolute; left:0; top:50%; transform:translateY(-50%); width:3px; height:60%; background:var(--accent); border-radius:99px; }
+        .nav-badge { background:var(--accent); color:white; font-size:10px; font-weight:700; padding:1px 6px; border-radius:99px; margin-left:auto; }
+
+        /* Cards */
+        .card { background:var(--surface2); border:1px solid var(--border); border-radius:16px; transition:border-color 0.2s, box-shadow 0.2s; }
+        .card:hover { border-color:rgba(255,255,255,0.1); }
+        .stat-card { position:relative; overflow:hidden; }
+        .stat-card::after { content:''; position:absolute; top:-40px; right:-40px; width:120px; height:120px; border-radius:50%; opacity:0.06; }
+        .stat-card.blue::after { background:#3b82f6; }
+        .stat-card.green::after { background:#10b981; }
+        .stat-card.purple::after { background:#8b5cf6; }
+        .stat-card.amber::after { background:#f59e0b; }
+
+        /* Inputs */
+        .input-base { width:100%; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.08); border-radius:10px; padding:10px 14px; color:var(--text); font-size:14px; font-family:'DM Sans',sans-serif; transition:border-color 0.2s, box-shadow 0.2s; outline:none; }
+        .input-base:focus { border-color:rgba(var(--accent-rgb),0.5); box-shadow:0 0 0 3px rgba(var(--accent-rgb),0.1); }
+        .input-base::placeholder { color:var(--text-dim); }
+        select.input-base { appearance:none; cursor:pointer; }
+
+        /* Buttons */
+        .btn { display:inline-flex; align-items:center; gap:8px; padding:9px 18px; border-radius:10px; font-weight:600; font-size:14px; font-family:'DM Sans',sans-serif; cursor:pointer; transition:all 0.2s; border:none; outline:none; }
+        .btn-primary { background:linear-gradient(135deg, var(--accent), var(--accent2)); color:white; box-shadow:0 4px 20px rgba(var(--accent-rgb),0.3); }
+        .btn-primary:hover { box-shadow:0 6px 28px rgba(var(--accent-rgb),0.45); transform:translateY(-1px); }
+        .btn-ghost { background:transparent; color:var(--text-dim); border:1px solid var(--border); }
+        .btn-ghost:hover { background:rgba(255,255,255,0.05); color:var(--text); }
+        .btn-danger { background:rgba(239,68,68,0.1); color:#f87171; border:1px solid rgba(239,68,68,0.2); }
+        .btn-danger:hover { background:rgba(239,68,68,0.2); }
+        .btn-success { background:rgba(16,185,129,0.1); color:#34d399; border:1px solid rgba(16,185,129,0.2); }
+        .btn-success:hover { background:rgba(16,185,129,0.2); }
+        .btn:disabled { opacity:0.4; cursor:not-allowed; transform:none !important; }
+
+        /* Badges */
+        .badge { display:inline-flex; align-items:center; gap:4px; padding:3px 10px; border-radius:99px; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+        .badge-blue { background:rgba(59,130,246,0.12); color:#60a5fa; border:1px solid rgba(59,130,246,0.2); }
+        .badge-green { background:rgba(16,185,129,0.12); color:#34d399; border:1px solid rgba(16,185,129,0.2); }
+        .badge-amber { background:rgba(245,158,11,0.12); color:#fbbf24; border:1px solid rgba(245,158,11,0.2); }
+        .badge-red { background:rgba(239,68,68,0.12); color:#f87171; border:1px solid rgba(239,68,68,0.2); }
+        .badge-purple { background:rgba(139,92,246,0.12); color:#a78bfa; border:1px solid rgba(139,92,246,0.2); }
+        .badge-gray { background:rgba(107,114,128,0.12); color:#9ca3af; border:1px solid rgba(107,114,128,0.2); }
+
+        /* Tables */
+        .data-table { width:100%; border-collapse:collapse; }
+        .data-table th { padding:12px 16px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-dim); border-bottom:1px solid var(--border); white-space:nowrap; }
+        .data-table td { padding:14px 16px; border-bottom:1px solid rgba(255,255,255,0.03); font-size:14px; }
+        .data-table tr:hover td { background:rgba(255,255,255,0.02); }
+        .data-table tr:last-child td { border-bottom:none; }
+
+        /* Progress bars */
+        .progress-track { height:6px; background:rgba(255,255,255,0.06); border-radius:99px; overflow:hidden; }
+        .progress-fill { height:100%; border-radius:99px; transition:width 1s cubic-bezier(0.4,0,0.2,1); position:relative; overflow:hidden; }
+        .progress-fill::after { content:''; position:absolute; inset:0; background:linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%); animation:shimmer 2s infinite; }
+        @keyframes shimmer { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+
+        /* Animations */
+        @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+        @keyframes slideRight { from{opacity:0;transform:translateX(-12px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes pulse-glow { 0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,0.4)} 50%{box-shadow:0 0 0 8px rgba(16,185,129,0)} }
+        .anim-up { animation:fadeUp 0.4s cubic-bezier(0.4,0,0.2,1) forwards; }
+        .anim-in { animation:fadeIn 0.3s ease forwards; }
+        .online-dot { animation:pulse-glow 2s infinite; }
+
+        /* Notification toast */
+        .toast { position:fixed; bottom:24px; right:24px; z-index:9999; padding:14px 20px; border-radius:14px; backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); animation:slideRight 0.3s ease; min-width:280px; display:flex; align-items:center; gap:12px; }
+        .toast.success { background:rgba(16,185,129,0.15); }
+        .toast.error { background:rgba(239,68,68,0.15); }
+        .toast.warning { background:rgba(245,158,11,0.15); }
+
+        /* Modal */
+        .modal-bg { position:fixed; inset:0; z-index:50; background:rgba(0,0,0,0.7); backdrop-filter:blur(8px); display:flex; align-items:center; justify-content:center; padding:16px; animation:fadeIn 0.2s ease; }
+        .modal { background:var(--surface2); border:1px solid rgba(255,255,255,0.1); border-radius:20px; width:100%; max-width:520px; max-height:90vh; overflow:auto; animation:fadeUp 0.3s ease; }
+
+        /* Status indicator */
+        .status-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+        .status-dot.online { background:#10b981; }
+        .status-dot.offline { background:rgba(239,68,68,0.5); }
+
+        /* Section headers */
+        .section-title { font-size:24px; font-weight:800; letter-spacing:-.02em; color:white; font-family:'Syne',sans-serif; }
+        .section-sub { font-size:14px; color:var(--text-dim); margin-top:4px; }
+
+        /* Week nav */
+        .week-nav { display:inline-flex; align-items:center; gap:8px; background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:12px; padding:6px 10px; }
+        .week-btn { width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:8px; cursor:pointer; color:var(--text-dim); transition:all 0.2s; border:none; background:transparent; }
+        .week-btn:hover { background:rgba(255,255,255,0.08); color:var(--text); }
+        .week-label { font-size:13px; font-weight:700; color:white; padding:0 8px; font-family:'JetBrains Mono',monospace; }
+
+        /* Tabs */
+        .tab-group { display:flex; gap:4px; background:rgba(0,0,0,0.3); border:1px solid var(--border); border-radius:12px; padding:4px; }
+        .tab-item { padding:7px 16px; border-radius:8px; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.2s; color:var(--text-dim); }
+        .tab-item.active { background:rgba(var(--accent-rgb),0.15); color:white; }
+        .tab-item:hover:not(.active) { color:var(--text); }
+
+        /* Chart placeholder colors */
+        .chart-bar { background:linear-gradient(to top, rgba(var(--accent-rgb),0.3), rgba(var(--accent-rgb),0.8)); border-radius:4px 4px 0 0; transition:height 0.8s cubic-bezier(0.4,0,0.2,1); }
+
+        /* Skeleton loading */
+        .skeleton { background:linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%); background-size:200% 100%; animation:skeleton-wave 1.5s infinite; border-radius:8px; }
+        @keyframes skeleton-wave { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+        /* Drag-drop planning */
+        .plan-slot { border:2px dashed rgba(255,255,255,0.08); border-radius:10px; transition:all 0.2s; }
+        .plan-slot:hover { border-color:rgba(var(--accent-rgb),0.4); background:rgba(var(--accent-rgb),0.05); }
+        .plan-shift { background:rgba(var(--accent-rgb),0.15); border:1px solid rgba(var(--accent-rgb),0.3); border-radius:8px; }
+        .plan-shift.green { background:rgba(16,185,129,0.15); border-color:rgba(16,185,129,0.3); }
+        .plan-shift.amber { background:rgba(245,158,11,0.12); border-color:rgba(245,158,11,0.25); }
+
+        /* Kanban */
+        .kanban-col { background:rgba(0,0,0,0.2); border:1px solid var(--border); border-radius:14px; min-height:300px; }
+        .kanban-card { background:var(--surface3); border:1px solid var(--border); border-radius:10px; cursor:grab; transition:all 0.2s; }
+        .kanban-card:hover { border-color:rgba(var(--accent-rgb),0.3); transform:translateY(-2px); }
+
+        /* Chart bars custom */
+        .bar-chart { display:flex; align-items:flex-end; gap:6px; height:120px; }
+        .bar-chart-bar { flex:1; border-radius:6px 6px 0 0; min-width:0; transition:height 1s cubic-bezier(0.4,0,0.2,1); }
+
+        /* Notification bell badge */
+        .bell-badge { position:absolute; top:-2px; right:-2px; width:16px; height:16px; background:#ef4444; border-radius:50%; border:2px solid var(--surface2); font-size:9px; display:flex; align-items:center; justify-content:center; font-weight:800; color:white; }
+
+        /* File upload zone */
+        .upload-zone { border:2px dashed rgba(var(--accent-rgb),0.3); border-radius:12px; padding:24px; text-align:center; cursor:pointer; transition:all 0.2s; }
+        .upload-zone:hover { border-color:rgba(var(--accent-rgb),0.6); background:rgba(var(--accent-rgb),0.05); }
+
+        /* Tooltip */
+        .tooltip-wrap { position:relative; }
+        .tooltip-wrap:hover .tooltip-box { opacity:1; visibility:visible; }
+        .tooltip-box { position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%); background:#1f2937; border:1px solid rgba(255,255,255,0.1); border-radius:8px; padding:6px 10px; font-size:12px; white-space:nowrap; opacity:0; visibility:hidden; transition:all 0.15s; pointer-events:none; z-index:99; }
+
+        /* Login */
+        .login-accent { background:linear-gradient(135deg, rgba(var(--accent-rgb),0.2), rgba(139,92,246,0.2)); }
+
+        /* Divider */
+        .divider { height:1px; background:var(--border); margin:20px 0; }
+
+        /* Color picker dots */
+        .color-dot { width:28px; height:28px; border-radius:50%; cursor:pointer; transition:all 0.2s; border:3px solid transparent; }
+        .color-dot.selected { border-color:white; transform:scale(1.15); }
+        .color-dot:hover { transform:scale(1.1); }
+
+        /* Plan cell */
+        .plan-cell { min-height:60px; }
+
+        /* Sector tag */
+        .sector-tag { padding:4px 12px; border-radius:99px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+
+        /* Sticky header rows */
+        .sticky-th { position:sticky; top:0; z-index:5; }
+
+        /* Rich text area */
+        textarea.input-base { resize:vertical; min-height:80px; line-height:1.6; }
+
+        /* Rating stars */
+        .star { color:#374151; cursor:pointer; transition:color 0.1s; font-size:18px; }
+        .star.lit { color:#f59e0b; }
+
+        /* Loading spinner */
+        .spinner { width:24px; height:24px; border:3px solid rgba(255,255,255,0.1); border-top-color:var(--accent); border-radius:50%; animation:spin 0.7s linear infinite; }
+        @keyframes spin { to{transform:rotate(360deg)} }
+    </style>
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom": "https://esm.sh/react-dom@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.263.1?external=react",
+            "recharts": "https://esm.sh/recharts@2.12.0?external=react,react-dom",
+            "jspdf": "https://esm.sh/jspdf@2.5.1",
+            "firebase/app": "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js",
+            "firebase/auth": "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js",
+            "firebase/firestore": "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js"
+        }
+    }
+    </script>
+</head>
+<body class="mesh-bg">
+<div id="root"></div>
+<script type="text/babel" data-type="module">
+import React, { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
+import { createRoot } from 'react-dom/client';
+import {
+    LayoutDashboard, FileText, History, Users, BarChart3, Settings, LogOut, Plus, Trash2, Save,
+    TrendingUp, Wallet, Award, Search, CheckCircle, AlertCircle, Menu, X, ChevronRight, ChevronLeft,
+    Calendar, Lock, User, Briefcase, UserPlus, UserMinus, Edit, Calculator, DollarSign, Key,
+    Activity, Trophy, Filter, Unlock, Target, ExternalLink, FileSignature, Building, Paperclip,
+    FilePlus, Clock, XCircle, Gavel, CreditCard, HelpCircle, Terminal, MessageSquare, Copy, Tag,
+    Send, Phone, MessageCircle, Eye, Download, Wifi, WifiOff, Palette, Bell, Package, BarChart,
+    PieChart, Zap, Star, Globe, Coffee, Shield, Layers, RefreshCw, ArrowUp, ArrowDown,
+    ChevronDown, Hash, Inbox, Archive, CheckSquare, Circle, Kanban, BookOpen, FileSpreadsheet,
+    Lightbulb, Map, Grid, List, MoreVertical, Share, Printer, Mail, Home, Cpu, AlignLeft
+} from 'lucide-react';
+import { AreaChart, Area, BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell, Legend } from 'recharts';
+import { jsPDF } from 'jspdf';
+import { initializeApp } from "firebase/app";
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "firebase/auth";
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, setDoc, onSnapshot, getDocs, writeBatch } from "firebase/firestore";
+
+// =============================================
+// FIREBASE SETUP
+// =============================================
+let app, auth, db, appId = 'bm-default-2024';
+try {
+    const fc = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+        apiKey: "AIzaSyB-EcSw-43CbNDYg_q5BLU9jL7HjGhZf78",
+        authDomain: "southside-custom.firebaseapp.com",
+        projectId: "southside-custom",
+        storageBucket: "southside-custom.firebasestorage.app",
+        messagingSenderId: "89724035455",
+        appId: "1:89724035455:web:b50bb76124829175ccba4a"
+    };
+    if (typeof __app_id !== 'undefined') appId = __app_id;
+    app = initializeApp(fc);
+    auth = getAuth(app);
+    db = getFirestore(app);
+} catch(e) { console.error("Firebase:", e); }
+
+// =============================================
+// CONSTANTS & HELPERS
+// =============================================
+const THEME_COLORS = [
+    {name:'indigo',hex:'#6366f1'},{name:'violet',hex:'#8b5cf6'},{name:'blue',hex:'#3b82f6'},
+    {name:'cyan',hex:'#06b6d4'},{name:'emerald',hex:'#10b981'},{name:'amber',hex:'#f59e0b'},
+    {name:'red',hex:'#ef4444'},{name:'rose',hex:'#f43f5e'},{name:'pink',hex:'#ec4899'},
+    {name:'orange',hex:'#f97316'},
+];
+
+const BUSINESS_SECTORS = [
+    {id:'garage',label:'Garage / Atelier',icon:'🔧',serviceLabel:'Prestation',invoiceLabel:'Facture'},
+    {id:'restaurant',label:'Restaurant / Bar',icon:'🍽️',serviceLabel:'Commande',invoiceLabel:'Addition'},
+    {id:'medical',label:'Cabinet Médical',icon:'🏥',serviceLabel:'Consultation',invoiceLabel:'Devis'},
+    {id:'legal',label:'Cabinet Juridique',icon:'⚖️',serviceLabel:'Mission',invoiceLabel:'Honoraire'},
+    {id:'tech',label:'Entreprise Tech',icon:'💻',serviceLabel:'Mission',invoiceLabel:'Facture'},
+    {id:'retail',label:'Commerce / Boutique',icon:'🛍️',serviceLabel:'Vente',invoiceLabel:'Ticket'},
+    {id:'real_estate',label:'Immobilier',icon:'🏢',serviceLabel:'Transaction',invoiceLabel:'Mandat'},
+    {id:'event',label:'Événementiel',icon:'🎉',serviceLabel:'Prestation',invoiceLabel:'Devis'},
+    {id:'other',label:'Autre',icon:'🏢',serviceLabel:'Service',invoiceLabel:'Facture'},
+];
+
+const DAYS_FR = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'];
+const DAYS_FULL = ['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'];
+
+const sw = d => { const n=new Date(d),day=n.getDay(),diff=n.getDate()-day+(day===0?-6:1); n.setDate(diff); n.setHours(0,0,0,0); return n; };
+const ew = d => { const n=sw(d); n.setDate(n.getDate()+6); n.setHours(23,59,59,999); return n; };
+const fmt = d => new Date(d).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+const fmtDate = d => new Date(d).toLocaleDateString('fr-FR');
+const fmtTime = d => new Date(d).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+const fmtMoney = n => `${parseFloat(n||0).toLocaleString('fr-FR',{minimumFractionDigits:0,maximumFractionDigits:0})}`;
+const fmtDuration = ms => { const m=Math.floor(ms/60000),h=Math.floor(m/60); return `${h}h${(m%60).toString().padStart(2,'0')}`; };
+
+const getGradeColor = g => {
+    const l=(g||'').toLowerCase();
+    if(l.includes('patron')&&!l.includes('co')) return 'red';
+    if(l.includes('co-patron')||l.includes('directeur')) return 'amber';
+    if(l.includes('avocat')||l.includes('juriste')) return 'purple';
+    if(l.includes('chef')||l.includes('manager')||l.includes('responsable')) return 'blue';
+    if(l.includes('senior')||l.includes('expert')) return 'green';
+    return 'gray';
+};
+
+// Local Storage helpers
+const ls = { get:(k,d)=>{ try{const v=localStorage.getItem(k); return v?JSON.parse(v):d;}catch{return d;} }, set:(k,v)=>{ try{localStorage.setItem(k,JSON.stringify(v));}catch{} } };
+
+// =============================================
+// INITIAL DATA
+// =============================================
+const INIT_THEME = { appName:'Business Manager', primaryColor:'indigo', secondaryColor:'violet', sector:'other', accentHex:'#6366f1' };
+const INIT_CONFIG = { services:[
+    {id:'srv1',name:'Service Standard',costPercent:20,bonusPercent:null},
+    {id:'srv2',name:'Service Premium',costPercent:10,bonusPercent:null},
+    {id:'srv3',name:'Consultation',costPercent:0,bonusPercent:null},
+    {id:'srv4',name:'Autre',costPercent:0,bonusPercent:null},
+]};
+const INIT_GRADES = [
+    {id:'g1',name:'Directeur',primePercent:20,maxSalary:5000,order:0},
+    {id:'g2',name:'Manager',primePercent:15,maxSalary:3500,order:1},
+    {id:'g3',name:'Senior',primePercent:10,maxSalary:2500,order:2},
+    {id:'g4',name:'Junior',primePercent:8,maxSalary:1800,order:3},
+    {id:'g5',name:'Stagiaire',primePercent:5,maxSalary:800,order:4},
+];
+const INIT_EMPLOYEES = [
+    {id:'e1',name:'Alex Martin',grade:'Directeur',role:'admin',password:'1234',dob:'1990-05-20',contractUrl:'',iban:'FR76 1234 5678 9012 3456 7890 123',isServiceActive:false},
+    {id:'e2',name:'Sophie Durand',grade:'Manager',role:'admin',password:'1234',dob:'1992-08-14',contractUrl:'',iban:'',isServiceActive:false},
+    {id:'e3',name:'Lucas Bernard',grade:'Senior',role:'user',password:'1234',dob:'1995-11-03',contractUrl:'',iban:'',isServiceActive:false},
+    {id:'e4',name:'Emma Leroy',grade:'Junior',role:'user',password:'1234',dob:'1998-02-22',contractUrl:'',iban:'',isServiceActive:false},
+];
+const INIT_INVOICES = [
+    {id:'inv1',date:'2026-02-17T10:00:00',client:'Acme Corp',type:'Service Premium',price:2500,profit:2250,bonus:337,employeeId:'e1',employeeName:'Alex Martin'},
+    {id:'inv2',date:'2026-02-17T14:00:00',client:'Beta Ltd',type:'Service Standard',price:800,profit:640,bonus:96,employeeId:'e3',employeeName:'Lucas Bernard'},
+    {id:'inv3',date:'2026-02-18T09:00:00',client:'Gamma SA',type:'Consultation',price:300,profit:300,bonus:45,employeeId:'e2',employeeName:'Sophie Durand'},
+    {id:'inv4',date:'2026-02-18T15:30:00',client:'Acme Corp',type:'Service Standard',price:1200,profit:960,bonus:144,employeeId:'e4',employeeName:'Emma Leroy'},
+    {id:'inv5',date:'2026-02-19T11:00:00',client:'Delta Inc',type:'Service Premium',price:3500,profit:3150,bonus:472,employeeId:'e1',employeeName:'Alex Martin'},
+];
+const INIT_CONTRACTS = [
+    {id:'c1',company:'Acme Corp',date:'2026-01-01',endDate:'2026-12-31',value:50000,description:'Contrat cadre annuel — services récurrents et support prioritaire.',url:'',supplementaryDocs:[]},
+];
+const INIT_APPLICATIONS = [];
+const INIT_MESSAGES = { open:'✅ Nous sommes ouverts ! Bienvenue.', close:'🔒 Nous sommes fermés. À bientôt !' };
+const INIT_TASKS = [];
+const INIT_NOTIFICATIONS = [];
+
+// =============================================
+// UI PRIMITIVES
+// =============================================
+const Icon = memo(({i:I,size=16,className=''}) => <I size={size} className={className} />);
+
+const Toast = memo(({msg,type}) => {
+    const icons={success:<CheckCircle size={18}/>,error:<AlertCircle size={18}/>,warning:<AlertCircle size={18}/>};
+    const colors={success:'text-emerald-400',error:'text-red-400',warning:'text-amber-400'};
+    return <div className={`toast ${type}`}><span className={colors[type]}>{icons[type]}</span><span className="text-white text-sm font-medium flex-1">{msg}</span></div>;
+});
+
+const Badge = memo(({children,color='gray'}) => <span className={`badge badge-${color}`}>{children}</span>);
+
+const Spinner = () => <div className="spinner"/>;
+
+const Skeleton = ({h='20px',w='100%',r='8px'}) => <div className="skeleton" style={{height:h,width:w,borderRadius:r}}/>;
+
+const WeekNav = memo(({date,onPrev,onNext}) => {
+    const s=sw(date), e=ew(date);
+    return (
+        <div className="week-nav mb-6">
+            <button className="week-btn" onClick={onPrev}><ChevronLeft size={16}/></button>
+            <span className="week-label">{fmt(s)} — {fmt(e)}</span>
+            <button className="week-btn" onClick={onNext}><ChevronRight size={16}/></button>
+        </div>
+    );
+});
+
+const StatCard = memo(({label,value,sub,icon:Ic,color='blue',trend,prefix='',mono=true}) => {
+    const colors={blue:'#3b82f6',green:'#10b981',purple:'#8b5cf6',amber:'#f59e0b',red:'#ef4444',indigo:'#6366f1'};
+    const c=colors[color]||colors.blue;
+    return (
+        <div className="card stat-card p-6" style={{'--c':c}}>
+            <div style={{position:'absolute',top:'-30px',right:'-30px',width:'100px',height:'100px',borderRadius:'50%',background:c,opacity:'0.07'}}/>
+            <div className="flex justify-between items-start mb-4 relative">
+                <p className="text-xs font-bold uppercase tracking-widest" style={{color:'var(--text-dim)'}}>{label}</p>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{background:`${c}20`,color:c}}><Ic size={18}/></div>
+            </div>
+            <div className="relative">
+                <p className={`text-3xl font-bold text-white ${mono?'font-display':''}`} style={{letterSpacing:'-.02em'}}>{prefix}{typeof value==='number'?fmtMoney(value):value}</p>
+                {sub && <p className="text-xs mt-1" style={{color:'var(--text-dim)'}}>{sub}</p>}
+                {trend!==undefined && <div className={`flex items-center gap-1 mt-2 text-xs font-semibold ${trend>=0?'text-emerald-400':'text-red-400'}`}>{trend>=0?<ArrowUp size={12}/>:<ArrowDown size={12}/>}{Math.abs(trend)}% vs semaine préc.</div>}
+            </div>
+        </div>
+    );
+});
+
+const Input = memo(({label,type='text',value,onChange,placeholder,prefix:Prefix,suffix,required,readOnly,list,autoFocus,onKeyDown,rows}) => {
+    const C = rows ? 'textarea' : 'input';
+    return (
+        <div className="flex flex-col gap-1.5">
+            {label && <label className="text-xs font-bold uppercase tracking-widest" style={{color:'var(--text-dim)'}}>{label}{required&&' *'}</label>}
+            <div className="relative">
+                {Prefix && <div className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:'var(--text-dim)'}}><Prefix size={14}/></div>}
+                <C type={type} value={value} onChange={onChange} placeholder={placeholder} readOnly={readOnly} list={list} autoFocus={autoFocus} onKeyDown={onKeyDown} rows={rows}
+                    className={`input-base ${Prefix?'pl-9':''} ${suffix?'pr-9':''} ${readOnly?'opacity-50 cursor-not-allowed':''}`}
+                    style={rows?{resize:'vertical',minHeight:'80px',lineHeight:'1.6'}:{}} />
+                {suffix && <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold" style={{color:'var(--text-dim)'}}>{suffix}</div>}
+            </div>
+        </div>
+    );
+});
+
+const Select = memo(({label,value,onChange,options,required,readOnly}) => (
+    <div className="flex flex-col gap-1.5">
+        {label && <label className="text-xs font-bold uppercase tracking-widest" style={{color:'var(--text-dim)'}}>{label}{required&&' *'}</label>}
+        <div className="relative">
+            <select value={value} onChange={onChange} disabled={readOnly} className="input-base pr-8" style={{appearance:'none'}}>
+                <option value="">Sélectionner...</option>
+                {options.map((o,i)=><option key={i} value={o.value||o}>{o.label||o}</option>)}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{color:'var(--text-dim)'}}/>
+        </div>
+    </div>
+));
+
+// =============================================
+// PDF GENERATORS
+// =============================================
+const genInvoicePDF = (inv,theme) => {
+    const doc = new jsPDF();
+    const hex = theme.accentHex||'#6366f1';
+    const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+    doc.setFillColor(r,g,b); doc.rect(0,0,210,35,'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(20); doc.setFont('helvetica','bold');
+    doc.text((theme.appName||'Business Manager').toUpperCase(),105,22,{align:'center'});
+    doc.setTextColor(0,0,0); doc.setFontSize(14); doc.setFont('helvetica','normal');
+    doc.text(`Facture #${String(inv.id).slice(-6).toUpperCase()}`,105,50,{align:'center'});
+    doc.setFontSize(10);
+    doc.text(`Date : ${fmtDate(inv.date)} à ${fmtTime(inv.date)}`,20,65);
+    doc.text(`Client : ${inv.client}`,20,73);
+    doc.text(`Traité par : ${inv.employeeName}`,20,81);
+    doc.setDrawColor(200,200,200); doc.line(20,90,190,90);
+    doc.setFontSize(12); doc.setFont('helvetica','bold');
+    doc.text('Prestation',20,102); doc.text('Montant',190,102,{align:'right'});
+    doc.line(20,107,190,107); doc.setFont('helvetica','normal');
+    doc.text(inv.type,20,118); doc.text(`${fmtMoney(inv.price)} €`,190,118,{align:'right'});
+    doc.line(20,130,190,130); doc.setFontSize(16); doc.setFont('helvetica','bold');
+    doc.text('TOTAL :',130,145); doc.text(`${fmtMoney(inv.price)} €`,190,145,{align:'right'});
+    doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(120,120,120);
+    doc.text('Merci de votre confiance.',105,175,{align:'center'});
+    doc.save(`facture_${String(inv.id).slice(-6)}.pdf`);
+};
+
+const genPaySlipPDF = (emp,data,periodDate,theme) => {
+    const doc = new jsPDF();
+    const s=sw(periodDate), e=ew(periodDate);
+    doc.setFillColor(15,15,20); doc.rect(0,0,210,297,'F');
+    doc.setFillColor(30,30,45); doc.rect(0,0,210,40,'F');
+    doc.setTextColor(255,255,255); doc.setFontSize(20); doc.setFont('helvetica','bold');
+    doc.text('FICHE DE PAIE',105,22,{align:'center'});
+    doc.setFontSize(11); doc.setFont('helvetica','normal');
+    doc.text(theme.appName||'Business Manager',105,31,{align:'center'});
+    doc.setFontSize(9); doc.text('EMPLOYÉ',20,55);
+    doc.setFont('helvetica','bold'); doc.text(emp.name,20,62);
+    doc.setFont('helvetica','normal'); doc.text(`Grade: ${emp.grade}`,20,69);
+    doc.text('PÉRIODE',120,55);
+    doc.text(`${s.toLocaleDateString()} — ${e.toLocaleDateString()}`,120,62);
+    doc.text(`Émis le: ${new Date().toLocaleDateString()}`,120,69);
+    doc.setDrawColor(60,60,80); doc.line(20,80,190,80);
+    doc.setFont('helvetica','bold'); doc.text('DÉSIGNATION',20,91); doc.text('MONTANT',190,91,{align:'right'});
+    doc.line(20,96,190,96); doc.setFont('helvetica','normal'); let y=110;
+    doc.text('Salaire fixe (prorata activité)',20,y); doc.text(`${fmtMoney(data.baseSalary)} €`,190,y,{align:'right'}); y+=12;
+    if(data.bonus>0){doc.setTextColor(16,185,129); doc.text('Prime (objectif atteint)',20,y); doc.text(`+${fmtMoney(data.bonus)} €`,190,y,{align:'right'}); doc.setTextColor(255,255,255);}
+    else{doc.setTextColor(100,100,100); doc.text('Prime (objectif non atteint)',20,y); doc.text('0 €',190,y,{align:'right'}); doc.setTextColor(255,255,255);}
+    y+=20; doc.line(20,y,190,y); y+=15;
+    doc.setFontSize(15); doc.setFont('helvetica','bold');
+    doc.text('NET À PAYER',120,y); doc.text(`${fmtMoney(data.total)} €`,190,y,{align:'right'});
+    y+=20; doc.setFontSize(9); doc.setFont('helvetica','italic'); doc.setTextColor(100,100,100);
+    doc.text('IBAN:',20,y); doc.setFont('helvetica','bold'); doc.text(emp.iban||'Non renseigné',20,y+7);
+    doc.save(`paie_${emp.name.replace(/ /g,'_')}.pdf`);
+};
+
+const genExcelCSV = (invoices, filename='export.csv') => {
+    const headers = ['ID','Date','Client','Type','Prix','Bénéfice','Prime','Employé'];
+    const rows = invoices.map(i=>[i.id,fmtDate(i.date),i.client,i.type,i.price,i.profit?.toFixed(2)||0,i.bonus?.toFixed(2)||0,i.employeeName]);
+    const csv = [headers,...rows].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=filename; a.click(); URL.revokeObjectURL(url);
+};
+
+// =============================================
+// MAIN APP
+// =============================================
+function App() {
+    // ---- AUTH ----
+    const [currentUser, setCurrentUser] = useState(null);
+    const [authUser, setAuthUser] = useState(null);
+    const [authMode, setAuthMode] = useState('login');
+    const [loginForm, setLoginForm] = useState({username:'',password:''});
+    const [loginError, setLoginError] = useState('');
+    const [stayConnected, setStayConnected] = useState(false);
+    const [isOffline, setIsOffline] = useState(false);
+
+    // ---- DATA ----
+    const [theme, setTheme] = useState(INIT_THEME);
+    const [config, setConfig] = useState(INIT_CONFIG);
+    const [grades, setGrades] = useState(INIT_GRADES);
+    const [employees, setEmployees] = useState([]);
+    const [invoices, setInvoices] = useState([]);
+    const [contracts, setContracts] = useState([]);
+    const [applications, setApplications] = useState([]);
+    const [tasks, setTasks] = useState(INIT_TASKS);
+    const [customMessages, setCustomMessages] = useState(INIT_MESSAGES);
+    const [serviceLogs, setServiceLogs] = useState([]);
+    const [notifications, setNotifications] = useState([]);
+    const [appNotifs, setAppNotifs] = useState([]); // in-app notifications
+
+    // ---- UI ----
+    const [activeTab, setActiveTab] = useState('dashboard');
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [toast, setToast] = useState(null);
+    const [modal, setModal] = useState(null); // {type, data}
+    const [loading, setLoading] = useState(true);
+
+    // ---- SERVICE ----
+    const [isServiceActive, setIsServiceActive] = useState(false);
+    const [serviceStartTime, setServiceStartTime] = useState(null);
+    const [serviceTimer, setServiceTimer] = useState(0); // ms elapsed live
+
+    // ---- DASHBOARD TARGET ----
+    const [dashTarget, setDashTarget] = useState(null);
+
+    // ---- FORMS ----
+    const [newInvoice, setNewInvoice] = useState({client:'',type:'',price:''});
+    const [newEmployee, setNewEmployee] = useState({name:'',grade:'',dob:'',contractUrl:'',iban:'',role:'user',password:'1234'});
+    const [newContract, setNewContract] = useState({company:'',date:'',endDate:'',value:'',description:'',url:'',supplementaryDocs:[]});
+    const [appForm, setAppForm] = useState({name:'',dob:'',ageHRP:'',phoneRP:'',discord:'',availability:'',motivation:''});
+    const [editingEmployee, setEditingEmployee] = useState(null);
+    const [editingContract, setEditingContract] = useState(null);
+    const [newTask, setNewTask] = useState({title:'',desc:'',assignee:'',priority:'medium',status:'todo'});
+
+    // ---- FILTERS ----
+    const [histSearch, setHistSearch] = useState('');
+    const [histFilter, setHistFilter] = useState('');
+    const [clientSearch, setClientSearch] = useState('');
+    const [selectedClient, setSelectedClient] = useState(null);
+    const [taskFilter, setTaskFilter] = useState('all');
+    const [planDate, setPlanDate] = useState(new Date());
+
+    // ---- EDITING ----
+    const [editingInvoiceId, setEditingInvoiceId] = useState(null);
+    const [editClientName, setEditClientName] = useState('');
+    const [isEditingPrices, setIsEditingPrices] = useState(false);
+    const [isEditingMessages, setIsEditingMessages] = useState(false);
+    const [confirmResetId, setConfirmResetId] = useState(null);
+
+    // ====== PERMISSIONS ======
+    const isBoss = useMemo(()=>['admin'].includes(currentUser?.role),[currentUser]);
+    const isManager = useMemo(()=>['admin','manager'].includes(currentUser?.role),[currentUser]);
+
+    // ====== THEME CSS VAR ======
+    useEffect(()=>{
+        const c=THEME_COLORS.find(c=>c.name===theme.primaryColor);
+        if(c){
+            document.documentElement.style.setProperty('--accent',c.hex);
+            const r=parseInt(c.hex.slice(1,3),16),g=parseInt(c.hex.slice(3,5),16),b=parseInt(c.hex.slice(5,7),16);
+            document.documentElement.style.setProperty('--accent-rgb',`${r},${g},${b}`);
+            setTheme(t=>({...t,accentHex:c.hex}));
+        }
+        const c2=THEME_COLORS.find(c=>c.name===theme.secondaryColor);
+        if(c2) document.documentElement.style.setProperty('--accent2',c2.hex);
+    },[theme.primaryColor,theme.secondaryColor]);
+
+    // ====== FIREBASE AUTH ======
+    useEffect(()=>{
+        if(!auth) return;
+        (async()=>{ try{ if(typeof __initial_auth_token!=='undefined'&&__initial_auth_token) await signInWithCustomToken(auth,__initial_auth_token); else await signInAnonymously(auth); }catch(e){ setIsOffline(true); loadOffline(); }})();
+        onAuthStateChanged(auth,u=>setAuthUser(u));
+    },[]);
+
+    const loadOffline = useCallback(()=>{
+        setEmployees(ls.get('bm_employees',INIT_EMPLOYEES));
+        setInvoices(ls.get('bm_invoices',INIT_INVOICES));
+        setContracts(ls.get('bm_contracts',INIT_CONTRACTS));
+        setApplications(ls.get('bm_applications',INIT_APPLICATIONS));
+        setGrades(ls.get('bm_grades',INIT_GRADES));
+        setTheme(ls.get('bm_theme',INIT_THEME));
+        setConfig(ls.get('bm_config',INIT_CONFIG));
+        setCustomMessages(ls.get('bm_messages',INIT_MESSAGES));
+        setTasks(ls.get('bm_tasks',INIT_TASKS));
+        setServiceLogs(ls.get('bm_service_logs',[]));
+        setLoading(false);
+    },[]);
+
+    // ====== FIRESTORE SUBSCRIPTIONS ======
+    useEffect(()=>{
+        if(isOffline||!authUser) return;
+        const base = ['artifacts',appId,'public','data'];
+        const unsubs=[];
+        const onErr = e=>{ if(e.code==='permission-denied'){ setIsOffline(true); loadOffline(); } };
+        const sub=(path,setter,seed,transform)=>{
+            if(path.length===1){ // doc
+                const unsub=onSnapshot(doc(db,...base,'settings',path[0]),(s)=>{ if(s.exists()) setter(transform?transform(s.data()):s.data()); else setDoc(doc(db,...base,'settings',path[0]),seed); },onErr);
+                unsubs.push(unsub);
+            } else {
+                const unsub=onSnapshot(collection(db,...base,path[0]),(s)=>{ const data=s.docs.map(d=>({...d.data(),docId:d.id})); setter(data.length?data:[]); if(s.empty&&seed) seed.forEach(e=>addDoc(collection(db,...base,path[0]),e)); },onErr);
+                unsubs.push(unsub);
+            }
+        };
+        sub(['invoices'],v=>setInvoices(v.sort((a,b)=>new Date(b.date)-new Date(a.date))),INIT_INVOICES);
+        sub(['employees'],v=>setEmployees(v),INIT_EMPLOYEES);
+        sub(['contracts'],v=>setContracts(v),INIT_CONTRACTS);
+        sub(['applications'],v=>setApplications(v),INIT_APPLICATIONS);
+        sub(['tasks'],v=>setTasks(v),[]);
+        sub(['grades'],(v)=>setGrades(v.list||INIT_GRADES),null,d=>d);
+        sub(['theme'],v=>setTheme(v.data||INIT_THEME),null,d=>({data:d.data||INIT_THEME}));
+        sub(['config'],v=>setConfig(v.data||INIT_CONFIG),null,d=>({data:d.data||INIT_CONFIG}));
+        sub(['messages'],v=>setCustomMessages(v.data||INIT_MESSAGES),null,d=>({data:d.data||INIT_MESSAGES}));
+        setTimeout(()=>setLoading(false),800);
+        return ()=>unsubs.forEach(u=>u());
+    },[authUser,isOffline]);
+
+    // Offline persistence
+    useEffect(()=>{ if(isOffline){ls.set('bm_employees',employees);} },[employees,isOffline]);
+    useEffect(()=>{ if(isOffline){ls.set('bm_invoices',invoices);} },[invoices,isOffline]);
+    useEffect(()=>{ if(isOffline){ls.set('bm_contracts',contracts);} },[contracts,isOffline]);
+    useEffect(()=>{ if(isOffline){ls.set('bm_applications',applications);} },[applications,isOffline]);
+    useEffect(()=>{ if(isOffline){ls.set('bm_tasks',tasks);} },[tasks,isOffline]);
+    useEffect(()=>{ if(isOffline){ls.set('bm_grades',grades);} },[grades,isOffline]);
+    useEffect(()=>{ if(isOffline){ls.set('bm_theme',theme);} },[theme,isOffline]);
+    useEffect(()=>{ if(isOffline){ls.set('bm_config',config);} },[config,isOffline]);
+    useEffect(()=>{ if(isOffline){ls.set('bm_messages',customMessages);} },[customMessages,isOffline]);
+    useEffect(()=>{ ls.set('bm_service_logs',serviceLogs); },[serviceLogs]);
+
+    // ====== AUTO-LOGIN ======
+    useEffect(()=>{
+        const savedId=ls.get('bm_session',null);
+        if(savedId&&!currentUser&&employees.length>0){
+            const u=employees.find(e=>e.id===savedId);
+            if(u){ setCurrentUser(u); setDashTarget(u); setActiveTab(u.role==='admin'?'dashboard':'personal'); showToast(`Bon retour, ${u.name.split(' ')[0]} !`); }
+        }
+    },[employees]);
+
+    // ====== SERVICE TIMER ======
+    useEffect(()=>{
+        if(!isServiceActive||!serviceStartTime) return;
+        const t=setInterval(()=>setServiceTimer(Date.now()-serviceStartTime),1000);
+        return ()=>clearInterval(t);
+    },[isServiceActive,serviceStartTime]);
+
+    // Heartbeat
+    useEffect(()=>{
+        if(!isServiceActive) return;
+        const t=setInterval(()=>ls.set('bm_svc_hb',Date.now()),5000);
+        return ()=>clearInterval(t);
+    },[isServiceActive]);
+
+    // ====== FIRESTORE HELPERS ======
+    const base = ['artifacts',appId,'public','data'];
+    const fsAdd = async(col,data)=>{ if(isOffline) return {id:`local_${Date.now()}`}; return addDoc(collection(db,...base,col),data); };
+    const fsUpdate = async(col,docId,data)=>{ if(isOffline) return; return updateDoc(doc(db,...base,col,docId),data); };
+    const fsDelete = async(col,docId)=>{ if(isOffline) return; return deleteDoc(doc(db,...base,col,docId)); };
+    const fsSetting = async(key,val)=>{ if(isOffline) return; return setDoc(doc(db,...base,'settings',key),{data:val}); };
+    const fsSettingRaw = async(key,val)=>{ if(isOffline) return; return setDoc(doc(db,...base,'settings',key),val); };
+
+    // ====== TOAST ======
+    const toastRef=useRef(null);
+    const showToast = useCallback((msg,type='success')=>{
+        setToast({msg,type});
+        clearTimeout(toastRef.current);
+        toastRef.current=setTimeout(()=>setToast(null),3500);
+    },[]);
+
+    const addAppNotif = useCallback((msg,type='info')=>{
+        const n={id:Date.now(),msg,type,ts:new Date().toISOString(),read:false};
+        setAppNotifs(prev=>[n,...prev].slice(0,50));
+    },[]);
+
+    // ====== SORTED EMPLOYEES ======
+    const sortedEmployees = useMemo(()=>{
+        const gw={}; grades.forEach((g,i)=>gw[g.name]=i);
+        return [...employees].sort((a,b)=>(gw[a.grade]??99)-(gw[b.grade]??99));
+    },[employees,grades]);
+
+    // ====== WEEK STATS ======
+    const weekStats = useMemo(()=>{
+        const s=sw(selectedDate), e=ew(selectedDate);
+        const wInv=invoices.filter(inv=>{ const d=new Date(inv.date); return d>=s&&d<=e; });
+        const totalRevenue=wInv.reduce((a,c)=>a+c.price,0);
+        const totalProfit=wInv.reduce((a,c)=>a+(c.profit||0),0);
+        const totalBonus=wInv.reduce((a,c)=>a+(c.bonus||0),0);
+
+        const empStats=sortedEmployees.map(emp=>{
+            const ei=wInv.filter(i=>i.employeeId===emp.id);
+            const revenue=ei.reduce((a,c)=>a+c.price,0);
+            const profit=ei.reduce((a,c)=>a+(c.profit||0),0);
+            const bonus=ei.reduce((a,c)=>a+(c.bonus||0),0);
+            const logs=serviceLogs.filter(l=>{ const d=new Date(l.date); return l.employeeId===emp.id&&d>=s&&d<=e; });
+            const hours=logs.reduce((a,l)=>a+l.duration,0);
+            return {...emp,invoiceCount:ei.length,revenue,profit,bonus,hours};
+        });
+
+        const days=DAYS_FR.map((n,i)=>{
+            const dayIdx=(i+1)%7;
+            return {name:n,ca:wInv.filter(inv=>new Date(inv.date).getDay()===dayIdx).reduce((a,c)=>a+c.price,0)};
+        });
+
+        const byType=wInv.reduce((acc,inv)=>{ acc[inv.type]=(acc[inv.type]||0)+inv.price; return acc; },{});
+        const pieData=Object.entries(byType).map(([name,value])=>({name,value}));
+
+        const prevS=new Date(s); prevS.setDate(prevS.getDate()-7);
+        const prevE=new Date(e); prevE.setDate(prevE.getDate()-7);
+        const prevInv=invoices.filter(i=>{ const d=new Date(i.date); return d>=prevS&&d<=prevE; });
+        const prevRev=prevInv.reduce((a,c)=>a+c.price,0);
+        const revTrend=prevRev>0?Math.round(((totalRevenue-prevRev)/prevRev)*100):0;
+
+        return {wInv,totalRevenue,totalProfit,totalBonus,empStats,days,pieData,revTrend};
+    },[invoices,sortedEmployees,selectedDate,serviceLogs]);
+
+    // ====== CLIENT STATS ======
+    const clientStats = useMemo(()=>{
+        const map={};
+        invoices.forEach(inv=>{
+            const n=inv.client?.trim();
+            if(!n) return;
+            if(!map[n]) map[n]={name:n,totalSpent:0,visitCount:0,lastVisit:inv.date,firstVisit:inv.date};
+            map[n].totalSpent+=inv.price||0;
+            map[n].visitCount++;
+            if(new Date(inv.date)>new Date(map[n].lastVisit)) map[n].lastVisit=inv.date;
+            if(new Date(inv.date)<new Date(map[n].firstVisit)) map[n].firstVisit=inv.date;
+        });
+        return Object.values(map).sort((a,b)=>b.totalSpent-a.totalSpent);
+    },[invoices]);
+
+    const uniqueClients = useMemo(()=>[...new Set(invoices.map(i=>i.client).filter(Boolean))],[invoices]);
+
+    // ====== INVOICE METRICS ======
+    const calcMetrics = useCallback((type,price)=>{
+        const p=parseFloat(price)||0;
+        const svc=(config.services||[]).find(s=>s.name===type);
+        const cost=svc?svc.costPercent:0;
+        return {cost,costAmt:p*cost/100,profit:p*(1-cost/100)};
+    },[config]);
+
+    // ====== ACTIONS ======
+    const handleLogin = useCallback(async e=>{
+        e.preventDefault();
+        if(!employees.length){ setLoginError('Chargement... veuillez patienter.'); return; }
+        const u=employees.find(emp=>emp.name.toLowerCase()===loginForm.username.toLowerCase()&&emp.password===loginForm.password);
+        if(u){
+            if(stayConnected) ls.set('bm_session',u.id); else ls.set('bm_session',null);
+            setCurrentUser(u); setDashTarget(u);
+            setActiveTab(u.role==='admin'?'dashboard':'personal');
+            setLoginError('');
+            showToast(`Bienvenue, ${u.name.split(' ')[0]} !`);
+        } else setLoginError('Identifiants incorrects.');
+    },[employees,loginForm,stayConnected,showToast]);
+
+    const handleLogout = useCallback(()=>{
+        if(isServiceActive) handleToggleService();
+        ls.set('bm_session',null);
+        setCurrentUser(null); setDashTarget(null);
+        setLoginForm({username:'',password:''});
+    },[isServiceActive]);
+
+    const handleToggleService = useCallback(async()=>{
+        if(isServiceActive){
+            const end=Date.now();
+            const log={id:Date.now(),employeeId:currentUser.id,startTime:serviceStartTime,endTime:end,duration:end-serviceStartTime,date:new Date().toISOString()};
+            setServiceLogs(p=>[...p,log]);
+            setIsServiceActive(false); setServiceStartTime(null); setServiceTimer(0);
+            ls.set('bm_svc_active','false');
+            // Update Firestore
+            const emp=employees.find(e=>e.id===currentUser.id);
+            if(emp?.docId) fsUpdate('employees',emp.docId,{isServiceActive:false});
+            showToast('Fin de service enregistrée.');
+        } else {
+            const start=Date.now();
+            setIsServiceActive(true); setServiceStartTime(start);
+            ls.set('bm_svc_active','true'); ls.set('bm_svc_start',start);
+            const emp=employees.find(e=>e.id===currentUser.id);
+            if(emp?.docId) fsUpdate('employees',emp.docId,{isServiceActive:true});
+            showToast('Prise de service ✅');
+        }
+    },[isServiceActive,serviceStartTime,currentUser,employees,showToast]);
+
+    const handleCreateInvoice = useCallback(async()=>{
+        if(!newInvoice.client||!newInvoice.type||!newInvoice.price){ showToast('Champs obligatoires manquants','error'); return; }
+        const price=parseFloat(newInvoice.price);
+        const m=calcMetrics(newInvoice.type,price);
+        const grd=grades.find(g=>g.name===currentUser.grade);
+        const svc=(config.services||[]).find(s=>s.name===newInvoice.type);
+        const bonusRate=svc?.bonusPercent!=null?svc.bonusPercent:(grd?.primePercent||0);
+        const bonus=m.profit>0?m.profit*bonusRate/100:0;
+        const inv={date:new Date().toISOString(),client:newInvoice.client,type:newInvoice.type,price,profit:m.profit,bonus,employeeId:currentUser.id,employeeName:currentUser.name};
+        if(isOffline){
+            setInvoices(p=>[{...inv,id:`local_${Date.now()}`},...p]);
+        } else {
+            await fsAdd('invoices',inv);
+        }
+        setNewInvoice({client:'',type:'',price:''});
+        addAppNotif(`Nouvelle facture — ${newInvoice.client} — ${fmtMoney(price)} €`);
+        showToast('Facture enregistrée !');
+    },[newInvoice,currentUser,grades,config,calcMetrics,isOffline,showToast,addAppNotif]);
+
+    const handleDeleteInvoice = useCallback(async id=>{
+        if(!window.confirm('Supprimer cette facture ?')) return;
+        const inv=invoices.find(i=>i.id===id);
+        if(isOffline) setInvoices(p=>p.filter(i=>i.id!==id));
+        else { const did=inv?.docId||id; await fsDelete('invoices',did); setInvoices(p=>p.filter(i=>i.id!==id)); }
+        showToast('Facture supprimée.','warning');
+    },[invoices,isOffline,showToast]);
+
+    const handleUpdateInvoiceClient = useCallback(async id=>{
+        if(!editClientName.trim()) return;
+        if(isOffline) setInvoices(p=>p.map(i=>i.id===id?{...i,client:editClientName}:i));
+        else {
+            const inv=invoices.find(i=>i.id===id);
+            const did=inv?.docId||id;
+            await fsUpdate('invoices',did,{client:editClientName});
+            setInvoices(p=>p.map(i=>i.id===id?{...i,client:editClientName}:i));
+        }
+        setEditingInvoiceId(null); setEditClientName('');
+        showToast('Nom modifié.');
+    },[editClientName,invoices,isOffline,showToast]);
+
+    const handleAddEmployee = useCallback(async()=>{
+        if(!newEmployee.name||!newEmployee.grade){ showToast('Nom et grade requis.','error'); return; }
+        const emp={...newEmployee,id:`e${Date.now()}`,isServiceActive:false};
+        if(isOffline) setEmployees(p=>[...p,emp]);
+        else await fsAdd('employees',emp);
+        setNewEmployee({name:'',grade:'',dob:'',contractUrl:'',iban:'',role:'user',password:'1234'});
+        showToast('Employé ajouté.');
+    },[newEmployee,isOffline,showToast]);
+
+    const handleSaveEmployee = useCallback(async()=>{
+        if(isOffline) setEmployees(p=>p.map(e=>e.id===editingEmployee.id?editingEmployee:e));
+        else { const did=editingEmployee.docId||editingEmployee.id; await fsUpdate('employees',did,editingEmployee); setEmployees(p=>p.map(e=>e.id===editingEmployee.id?editingEmployee:e)); }
+        setEditingEmployee(null); setModal(null);
+        showToast('Informations mises à jour.');
+    },[editingEmployee,isOffline,showToast]);
+
+    const handleFireEmployee = useCallback(async id=>{
+        const emp=employees.find(e=>e.id===id);
+        if(isOffline) setEmployees(p=>p.filter(e=>e.id!==id));
+        else if(emp?.docId) { await fsDelete('employees',emp.docId); setEmployees(p=>p.filter(e=>e.id!==id)); }
+        setEditingEmployee(null); setModal(null);
+        showToast('Employé licencié.','warning');
+    },[employees,isOffline,showToast]);
+
+    const handleSaveGrades = useCallback(async newGrades=>{
+        setGrades(newGrades);
+        if(!isOffline) await fsSettingRaw('grades',{list:newGrades});
+    },[isOffline]);
+
+    const handleSaveConfig = useCallback(async newCfg=>{
+        setConfig(newCfg);
+        if(!isOffline) await fsSetting('config',newCfg);
+    },[isOffline]);
+
+    const handleSaveTheme = useCallback(async newT=>{
+        setTheme(newT);
+        if(!isOffline) await fsSetting('theme',newT);
+        showToast('Thème sauvegardé !');
+    },[isOffline,showToast]);
+
+    const handleSaveMessages = useCallback(async()=>{
+        if(!isOffline) await fsSetting('messages',customMessages);
+        setIsEditingMessages(false); showToast('Messages sauvegardés.');
+    },[customMessages,isOffline,showToast]);
+
+    const handleSaveContract = useCallback(async()=>{
+        if(!newContract.company){ showToast('Nom entreprise requis.','error'); return; }
+        if(editingContract){
+            const did=editingContract.docId||editingContract.id;
+            if(isOffline) setContracts(p=>p.map(c=>c.id===editingContract.id?{...newContract,id:editingContract.id}:c));
+            else { await fsUpdate('contracts',did,newContract); setContracts(p=>p.map(c=>c.id===editingContract.id?{...newContract,id:editingContract.id,docId:did}:c)); }
+            setEditingContract(null);
+        } else {
+            if(isOffline) setContracts(p=>[...p,{...newContract,id:`c${Date.now()}`}]);
+            else await fsAdd('contracts',newContract);
+        }
+        setNewContract({company:'',date:'',endDate:'',value:'',description:'',url:'',supplementaryDocs:[]});
+        showToast(editingContract?'Contrat modifié.':'Contrat ajouté.');
+    },[newContract,editingContract,isOffline,showToast]);
+
+    const handleDeleteContract = useCallback(async id=>{
+        const c=contracts.find(c=>c.id===id);
+        if(isOffline) setContracts(p=>p.filter(c=>c.id!==id));
+        else if(c?.docId){ await fsDelete('contracts',c.docId); setContracts(p=>p.filter(c=>c.id!==id)); }
+        showToast('Contrat supprimé.','warning');
+    },[contracts,isOffline,showToast]);
+
+    const handleAcceptApp = useCallback(async app=>{
+        const id=`e${Date.now()}`;
+        const emp={id,name:app.name,grade:grades[grades.length-1]?.name||'Junior',role:'user',password:'1234',dob:app.dob,contractUrl:'',iban:'',isServiceActive:false};
+        if(isOffline){ setEmployees(p=>[...p,emp]); setApplications(p=>p.filter(a=>a.id!==app.id)); }
+        else { await fsAdd('employees',emp); const did=app.docId||app.id; await fsDelete('applications',did); setApplications(p=>p.filter(a=>a.id!==app.id)); }
+        showToast(`${app.name} recruté !`);
+        addAppNotif(`Nouvelle recrue : ${app.name}`);
+    },[grades,isOffline,showToast,addAppNotif]);
+
+    const handleRejectApp = useCallback(async id=>{
+        const app=applications.find(a=>a.id===id);
+        if(isOffline) setApplications(p=>p.filter(a=>a.id!==id));
+        else if(app?.docId){ await fsDelete('applications',app.docId); setApplications(p=>p.filter(a=>a.id!==id)); }
+        showToast('Candidature refusée.','warning');
+    },[applications,isOffline,showToast]);
+
+    const handleSubmitApp = useCallback(async()=>{
+        if(!appForm.name){ showToast('Nom requis.','error'); return; }
+        const a={...appForm,date:new Date().toISOString()};
+        if(isOffline) setApplications(p=>[...p,{...a,id:`app${Date.now()}`}]);
+        else await fsAdd('applications',a);
+        setAppForm({name:'',dob:'',ageHRP:'',phoneRP:'',discord:'',availability:'',motivation:''});
+        setAuthMode('login');
+        showToast('Candidature envoyée !');
+    },[appForm,isOffline,showToast]);
+
+    const handleAddTask = useCallback(async()=>{
+        if(!newTask.title) return;
+        const t={...newTask,id:`t${Date.now()}`,createdAt:new Date().toISOString(),createdBy:currentUser.id};
+        if(isOffline) setTasks(p=>[...p,t]);
+        else await fsAdd('tasks',t);
+        setNewTask({title:'',desc:'',assignee:'',priority:'medium',status:'todo'});
+        showToast('Tâche créée.');
+    },[newTask,currentUser,isOffline,showToast]);
+
+    const handleUpdateTask = useCallback(async(id,updates)=>{
+        const t=tasks.find(t=>t.id===id);
+        if(isOffline) setTasks(p=>p.map(t=>t.id===id?{...t,...updates}:t));
+        else if(t?.docId){ await fsUpdate('tasks',t.docId,updates); setTasks(p=>p.map(t=>t.id===id?{...t,...updates}:t)); }
+    },[tasks,isOffline]);
+
+    const handleDeleteTask = useCallback(async id=>{
+        const t=tasks.find(t=>t.id===id);
+        if(isOffline) setTasks(p=>p.filter(t=>t.id!==id));
+        else if(t?.docId){ await fsDelete('tasks',t.docId); setTasks(p=>p.filter(t=>t.id!==id)); }
+    },[tasks,isOffline]);
+
+    const handleRenameClient = useCallback(async(oldName,newName)=>{
+        const toUpdate=invoices.filter(i=>i.client?.trim()===oldName);
+        const updated=invoices.map(i=>i.client?.trim()===oldName?{...i,client:newName}:i);
+        setInvoices(updated);
+        if(!isOffline){
+            const batch=writeBatch(db);
+            toUpdate.forEach(inv=>{ const did=inv.docId; if(did) batch.update(doc(db,...base,'invoices',did),{client:newName}); });
+            await batch.commit();
+        }
+        if(selectedClient) setSelectedClient(p=>({...p,name:newName}));
+        showToast(`Client renommé en "${newName}".`);
+    },[invoices,isOffline,selectedClient,showToast]);
+
+    const handleResetStats = useCallback(async()=>{
+        if(isOffline){ setInvoices([]); ls.set('bm_invoices',[]); }
+        else {
+            const snap=await getDocs(collection(db,...base,'invoices'));
+            const batch=writeBatch(db);
+            snap.forEach(d=>batch.delete(d.ref));
+            await batch.commit();
+            setInvoices([]);
+        }
+        setConfirmResetId(null);
+        showToast('Statistiques réinitialisées.','warning');
+    },[isOffline,showToast]);
+
+    // ====== COMPUTED WEEKLY PERSONAL ======
+    const getPersonalStats = useCallback((target)=>{
+        const s=sw(selectedDate), e=ew(selectedDate);
+        const myInv=weekStats.wInv.filter(i=>i.employeeId===target.id);
+        const revenue=myInv.reduce((a,c)=>a+c.price,0);
+        const profit=myInv.reduce((a,c)=>a+(c.profit||0),0);
+        const bonusT=myInv.reduce((a,c)=>a+(c.bonus||0),0);
+        const grd=grades.find(g=>g.name===target.grade);
+        const maxSalary=grd?.maxSalary||0;
+        const targetProfit=maxSalary*1.5;
+        const progress=targetProfit>0?Math.min(profit/targetProfit*100,100):100;
+        const isComplete=progress>=100;
+        const earnedSalary=maxSalary*(progress/100);
+        const logs=serviceLogs.filter(l=>{ const d=new Date(l.date); return l.employeeId===target.id&&d>=s&&d<=e; });
+        let totalMs=logs.reduce((a,l)=>a+l.duration,0);
+        if(target.id===currentUser?.id&&isServiceActive&&serviceStartTime) totalMs+=serviceTimer;
+        return {myInv,revenue,profit,bonusT,maxSalary,targetProfit,progress,isComplete,earnedSalary,totalMs};
+    },[weekStats,grades,serviceLogs,selectedDate,currentUser,isServiceActive,serviceStartTime,serviceTimer]);
+
+    // ===================== SECTOR INFO =====================
+    const sector = useMemo(()=>BUSINESS_SECTORS.find(s=>s.id===theme.sector)||BUSINESS_SECTORS[BUSINESS_SECTORS.length-1],[theme.sector]);
+
+    // ===================== RENDER =====================
+    if(loading && !currentUser) return (
+        <div className="min-h-screen flex items-center justify-center">
+            <div className="text-center">
+                <div className="spinner" style={{width:40,height:40,margin:'0 auto 16px'}}/>
+                <p className="text-sm" style={{color:'var(--text-dim)'}}>Chargement...</p>
+            </div>
+        </div>
+    );
+
+    if(!currentUser) return <LoginScreen {...{theme,employees,loginForm,setLoginForm,loginError,handleLogin,stayConnected,setStayConnected,authMode,setAuthMode,appForm,setAppForm,handleSubmitApp,toast,showToast,sector}}/>;
+
+    const navItems = [
+        {id:'dashboard',icon:LayoutDashboard,label:'Dashboard',admin:true},
+        {id:'personal',icon:User,label:'Mon Espace'},
+        {id:'facture',icon:Plus,label:`Nouvelle ${sector.invoiceLabel}`},
+        {id:'historique',icon:History,label:'Historique'},
+        {id:'clients',icon:Users,label:'Base Clients',admin:false},
+        {id:'tasks',icon:CheckSquare,label:'Tâches',badge:tasks.filter(t=>t.status!=='done'&&t.assignee===currentUser.id).length||null},
+        {id:'planning',icon:Calendar,label:'Planning'},
+        {id:'contracts',icon:FileSignature,label:'Contrats'},
+        {id:'tarifs',icon:Tag,label:'Tarifs'},
+        {id:'aide',icon:HelpCircle,label:'Aide'},
+        {id:'hr',icon:Briefcase,label:'Ressources Humaines',admin:true,badge:applications.length||null},
+        {id:'salaires',icon:Award,label:'Salaires & Primes',admin:true},
+        {id:'settings',icon:Settings,label:'Configuration',admin:true},
+    ];
+
+    const visibleNav=navItems.filter(n=>!n.admin||(n.admin&&isBoss));
+
+    const unreadNotifs=appNotifs.filter(n=>!n.read).length;
+
+    return (
+        <div className="flex h-screen overflow-hidden">
+            {/* SIDEBAR */}
+            <aside className={`sidebar ${sidebarOpen?'':'closed'}`}>
+                {/* Logo */}
+                <div className="p-5 pb-3 border-b" style={{borderColor:'var(--border)'}}>
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-lg font-bold flex-shrink-0" style={{background:`linear-gradient(135deg,${theme.accentHex||'#6366f1'},var(--accent2))`}}>
+                            {theme.appName.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                            <h1 className="text-sm font-bold text-white truncate leading-tight">{theme.appName}</h1>
+                            <p className="text-xs truncate" style={{color:'var(--text-dim)'}}>{sector.label}</p>
+                        </div>
+                        <button className="ml-auto" style={{color:'var(--text-dim)'}} onClick={()=>setSidebarOpen(false)}>
+                            <ChevronLeft size={18}/>
+                        </button>
+                    </div>
+                </div>
+
+                {/* Service widget */}
+                {currentUser && (
+                    <div className="mx-3 mt-3 p-3 rounded-xl border" style={{borderColor:isServiceActive?'rgba(16,185,129,0.3)':'var(--border)',background:isServiceActive?'rgba(16,185,129,0.08)':'rgba(0,0,0,0.2)'}}>
+                        <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-bold uppercase tracking-wider" style={{color:isServiceActive?'#34d399':'var(--text-dim)'}}>
+                                {isServiceActive?'En service':'Hors service'}
+                            </span>
+                            {isServiceActive && <span className="mono text-xs text-emerald-400">{fmtDuration(serviceTimer)}</span>}
+                        </div>
+                        <button onClick={handleToggleService} className={`w-full btn text-xs py-1.5 ${isServiceActive?'btn-danger':'btn-success'}`}>
+                            {isServiceActive?<><WifiOff size={12}/>Fin service</>:<><Wifi size={12}/>Prise service</>}
+                        </button>
+                    </div>
+                )}
+
+                {/* Nav */}
+                <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
+                    <p className="px-3 pt-2 pb-1 text-xs font-bold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>Navigation</p>
+                    {visibleNav.slice(0,6).map(n=>(
+                        <div key={n.id} className={`nav-item ${activeTab===n.id?'active':''}`} onClick={()=>{ setActiveTab(n.id); if(n.id==='personal') setDashTarget(currentUser); if(window.innerWidth<1024) setSidebarOpen(false); }}>
+                            <n.icon size={17}/>
+                            <span>{n.label}</span>
+                            {n.badge?<span className="nav-badge">{n.badge}</span>:null}
+                        </div>
+                    ))}
+                    {isBoss && <><p className="px-3 pt-3 pb-1 text-xs font-bold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>Gestion</p>
+                    {visibleNav.slice(6,10).map(n=>(
+                        <div key={n.id} className={`nav-item ${activeTab===n.id?'active':''}`} onClick={()=>{ setActiveTab(n.id); if(window.innerWidth<1024) setSidebarOpen(false); }}>
+                            <n.icon size={17}/><span>{n.label}</span>
+                            {n.badge?<span className="nav-badge">{n.badge}</span>:null}
+                        </div>
+                    ))}
+                    <p className="px-3 pt-3 pb-1 text-xs font-bold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.2)'}}>Admin</p>
+                    {visibleNav.slice(10).map(n=>(
+                        <div key={n.id} className={`nav-item ${activeTab===n.id?'active':''}`} onClick={()=>{ setActiveTab(n.id); if(window.innerWidth<1024) setSidebarOpen(false); }}>
+                            <n.icon size={17}/><span>{n.label}</span>
+                            {n.badge?<span className="nav-badge">{n.badge}</span>:null}
+                        </div>
+                    ))}</>}
+                    {!isBoss && <>{visibleNav.slice(6).map(n=>(
+                        <div key={n.id} className={`nav-item ${activeTab===n.id?'active':''}`} onClick={()=>{ setActiveTab(n.id); if(window.innerWidth<1024) setSidebarOpen(false); }}>
+                            <n.icon size={17}/><span>{n.label}</span>
+                            {n.badge?<span className="nav-badge">{n.badge}</span>:null}
+                        </div>
+                    ))}</>}
+                </nav>
+
+                {/* User */}
+                <div className="p-3 border-t" style={{borderColor:'var(--border)'}}>
+                    <div className="flex items-center gap-3 p-3 rounded-xl" style={{background:'rgba(0,0,0,0.2)'}}>
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{background:'linear-gradient(135deg,var(--accent),var(--accent2))'}}>
+                            {currentUser.name.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{currentUser.name}</p>
+                            <p className="text-xs truncate" style={{color:'var(--text-dim)'}}>{currentUser.grade}</p>
+                        </div>
+                        <button onClick={handleLogout} title="Déconnexion" style={{color:'var(--text-dim)'}} className="hover:text-white transition-colors"><LogOut size={16}/></button>
+                    </div>
+                </div>
+            </aside>
+
+            {/* MAIN */}
+            <div className="main-content flex flex-col h-screen overflow-hidden" style={{marginLeft:sidebarOpen?'260px':'0',transition:'margin 0.3s'}}>
+                {/* Top bar */}
+                <header className="flex items-center gap-3 px-6 py-3 border-b flex-shrink-0" style={{borderColor:'var(--border)',background:'rgba(13,13,20,0.8)',backdropFilter:'blur(20px)'}}>
+                    <button className="p-2 rounded-lg hover:bg-white/5 transition-colors" style={{color:'var(--text-dim)'}} onClick={()=>setSidebarOpen(!sidebarOpen)}>
+                        <Menu size={20}/>
+                    </button>
+                    <div className="flex-1"/>
+                    {isOffline && <span className="badge badge-amber"><WifiOff size={10}/>Hors-ligne</span>}
+                    {/* Notification bell */}
+                    <div className="relative">
+                        <button className="p-2 rounded-lg hover:bg-white/5 transition-colors relative" style={{color:'var(--text-dim)'}} onClick={()=>setModal({type:'notifs'})}>
+                            <Bell size={20}/>
+                            {unreadNotifs>0 && <span className="bell-badge">{unreadNotifs>9?'9+':unreadNotifs}</span>}
+                        </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <div className={`status-dot ${isServiceActive?'online':'offline'}`}/>
+                        <span className="text-xs font-medium" style={{color:'var(--text-dim)'}}>{currentUser.name.split(' ')[0]}</span>
+                    </div>
+                </header>
+
+                {/* Content */}
+                <main className="flex-1 overflow-y-auto p-6" style={{scrollbarWidth:'thin'}}>
+                    <div className="anim-in" key={activeTab}>
+                        {activeTab==='dashboard' && <DashboardTab {...{weekStats,selectedDate,setSelectedDate,theme,handleViewEmpStats:emp=>{setDashTarget(emp);setActiveTab('personal');},sector,invoices}}/>}
+                        {activeTab==='personal' && <PersonalTab {...{target:dashTarget||currentUser,currentUser,weekStats,selectedDate,setSelectedDate,getPersonalStats,isServiceActive,serviceTimer,serviceStartTime,isBoss,theme,grades,serviceLogs,sector}}/>}
+                        {activeTab==='facture' && <InvoiceTab {...{newInvoice,setNewInvoice,handleCreateInvoice,config,calcMetrics,uniqueClients,theme,sector}}/>}
+                        {activeTab==='historique' && <HistoryTab {...{invoices,weekStats,selectedDate,setSelectedDate,histSearch,setHistSearch,histFilter,setHistFilter,handleDeleteInvoice,isBoss,currentUser,config,editingInvoiceId,setEditingInvoiceId,editClientName,setEditClientName,handleUpdateInvoiceClient,theme,sector,genInvoicePDF,genExcelCSV}}/>}
+                        {activeTab==='clients' && <ClientsTab {...{clientStats,invoices,clientSearch,setClientSearch,selectedClient,setSelectedClient,handleRenameClient,isBoss,theme,genInvoicePDF}}/>}
+                        {activeTab==='tasks' && <TasksTab {...{tasks,newTask,setNewTask,handleAddTask,handleUpdateTask,handleDeleteTask,employees,currentUser,taskFilter,setTaskFilter,isBoss,theme}}/>}
+                        {activeTab==='planning' && <PlanningTab {...{employees:sortedEmployees,serviceLogs,planDate,setPlanDate,theme}}/>}
+                        {activeTab==='contracts' && <ContractsTab {...{contracts,newContract,setNewContract,handleSaveContract,handleDeleteContract,editingContract,setEditingContract,isBoss,theme}}/>}
+                        {activeTab==='tarifs' && <TarifsTab {...{config,handleSaveConfig,isEditingPrices,setIsEditingPrices,isBoss,theme}}/>}
+                        {activeTab==='aide' && <AideTab {...{customMessages,setCustomMessages,isEditingMessages,setIsEditingMessages,handleSaveMessages,isBoss,theme}}/>}
+                        {activeTab==='hr' && <HRTab {...{employees:sortedEmployees,applications,newEmployee,setNewEmployee,handleAddEmployee,handleAcceptApp,handleRejectApp,editingEmployee,setEditingEmployee,setModal,isBoss,grades,theme,handleViewEmpStats:emp=>{setDashTarget(emp);setActiveTab('personal');},sector,serviceLogs,weekStats}}/>}
+                        {activeTab==='salaires' && <SalairesTab {...{weekStats,grades,selectedDate,setSelectedDate,generatePaySlipPDF:genPaySlipPDF,theme,genExcelCSV,invoices,serviceLogs}}/>}
+                        {activeTab==='settings' && <SettingsTab {...{theme,handleSaveTheme,config,handleSaveConfig,grades,handleSaveGrades,confirmResetId,setConfirmResetId,handleResetStats,customMessages,setCustomMessages,handleSaveMessages,isEditingMessages,setIsEditingMessages,sector}}/>}
+                    </div>
+                </main>
+            </div>
+
+            {/* MODALS */}
+            {modal?.type==='notifs' && (
+                <div className="modal-bg" onClick={()=>setModal(null)}>
+                    <div className="modal p-0 overflow-hidden max-w-sm" onClick={e=>e.stopPropagation()}>
+                        <div className="p-5 border-b flex items-center justify-between" style={{borderColor:'var(--border)'}}>
+                            <h3 className="font-bold text-white">Notifications</h3>
+                            <div className="flex gap-2">
+                                <button className="text-xs" style={{color:'var(--text-dim)'}} onClick={()=>setAppNotifs(p=>p.map(n=>({...n,read:true})))}>Tout lire</button>
+                                <button onClick={()=>setModal(null)} style={{color:'var(--text-dim)'}}><X size={18}/></button>
+                            </div>
+                        </div>
+                        <div style={{maxHeight:'400px',overflowY:'auto'}}>
+                            {appNotifs.length===0 && <p className="p-6 text-center text-sm" style={{color:'var(--text-dim)'}}>Aucune notification.</p>}
+                            {appNotifs.map(n=>(
+                                <div key={n.id} className="p-4 border-b flex gap-3 cursor-pointer hover:bg-white/3 transition-colors" style={{borderColor:'var(--border)',opacity:n.read?0.5:1}} onClick={()=>setAppNotifs(p=>p.map(x=>x.id===n.id?{...x,read:true}:x))}>
+                                    <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{background:n.read?'transparent':'var(--accent)'}}/>
+                                    <div>
+                                        <p className="text-sm text-white">{n.msg}</p>
+                                        <p className="text-xs mt-1" style={{color:'var(--text-dim)'}}>{fmtTime(n.ts)}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+            {editingEmployee && (
+                <EmployeeModal emp={editingEmployee} setEmp={setEditingEmployee} grades={grades} handleSave={handleSaveEmployee} handleFire={handleFireEmployee} currentUser={currentUser} isBoss={isBoss} theme={theme}/>
+            )}
+
+            {toast && <Toast msg={toast.msg} type={toast.type}/>}
+        </div>
+    );
+}
+
+// =============================================
+// LOGIN SCREEN
+// =============================================
+function LoginScreen({theme,employees,loginForm,setLoginForm,loginError,handleLogin,stayConnected,setStayConnected,authMode,setAuthMode,appForm,setAppForm,handleSubmitApp,toast,sector}){
+    return (
+        <div className="min-h-screen flex items-center justify-center p-4 relative">
+            <div className="w-full max-w-md anim-up">
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center text-2xl font-black text-white" style={{background:`linear-gradient(135deg,var(--accent),var(--accent2))`}}>
+                        {theme.appName.charAt(0)}
+                    </div>
+                    <h1 className="text-2xl font-black text-white" style={{letterSpacing:'-.03em'}}>{theme.appName}</h1>
+                    <p className="text-sm mt-1" style={{color:'var(--text-dim)'}}>{sector.label} · Espace collaboratif</p>
+                </div>
+
+                <div className="card p-7">
+                    {authMode==='login' ? (
+                        <>
+                            <h2 className="font-display text-lg font-bold text-white mb-5">Connexion</h2>
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <Input label="Identifiant" placeholder="Prénom Nom" value={loginForm.username} onChange={e=>setLoginForm({...loginForm,username:e.target.value})} prefix={User}/>
+                                <Input label="Mot de passe" type="password" placeholder="Code d'accès" value={loginForm.password} onChange={e=>setLoginForm({...loginForm,password:e.target.value})} prefix={Lock}/>
+                                {loginError && <div className="flex items-center gap-2 p-3 rounded-lg text-sm text-red-400" style={{background:'rgba(239,68,68,0.1)'}}><AlertCircle size={15}/>{loginError}</div>}
+                                <label className="flex items-center gap-3 cursor-pointer py-1">
+                                    <div className={`w-5 h-5 rounded flex items-center justify-center transition-all ${stayConnected?'text-white':'border'}`} style={stayConnected?{background:'var(--accent)'}:{borderColor:'rgba(255,255,255,0.2)'}} onClick={()=>setStayConnected(!stayConnected)}>
+                                        {stayConnected&&<CheckCircle size={14}/>}
+                                    </div>
+                                    <span className="text-sm" style={{color:'var(--text-dim)'}}>Rester connecté</span>
+                                </label>
+                                <button type="submit" className="btn btn-primary w-full justify-center py-3">Se connecter</button>
+                            </form>
+                            <div className="divider"/>
+                            <button onClick={()=>setAuthMode('apply')} className="w-full py-3 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:text-white" style={{borderColor:'rgba(255,255,255,0.1)',color:'var(--text-dim)'}}>
+                                <Briefcase size={16}/> Déposer une candidature
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <button onClick={()=>setAuthMode('login')} className="flex items-center gap-2 text-sm mb-5 transition-colors hover:text-white" style={{color:'var(--text-dim)'}}>
+                                <ChevronLeft size={16}/> Retour
+                            </button>
+                            <h2 className="font-display text-lg font-bold text-white mb-5">Candidature</h2>
+                            <div className="space-y-4">
+                                <Input label="Nom complet *" value={appForm.name} onChange={e=>setAppForm({...appForm,name:e.target.value})} placeholder="Prénom Nom"/>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Input label="Date naissance" type="date" value={appForm.dob} onChange={e=>setAppForm({...appForm,dob:e.target.value})}/>
+                                    <Input label="Age réel" type="number" value={appForm.ageHRP} onChange={e=>setAppForm({...appForm,ageHRP:e.target.value})} placeholder="Ex: 22"/>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Input label="Téléphone" value={appForm.phoneRP} onChange={e=>setAppForm({...appForm,phoneRP:e.target.value})} placeholder="06..."/>
+                                    <Input label="Discord" value={appForm.discord} onChange={e=>setAppForm({...appForm,discord:e.target.value})} placeholder="user#1234"/>
+                                </div>
+                                <Input label="Disponibilités" value={appForm.availability} onChange={e=>setAppForm({...appForm,availability:e.target.value})} placeholder="Soirs, week-ends..."/>
+                                <Input label="Motivation" value={appForm.motivation} onChange={e=>setAppForm({...appForm,motivation:e.target.value})} placeholder="Pourquoi nous rejoindre ?" rows={3}/>
+                                <button onClick={handleSubmitApp} className="btn btn-primary w-full justify-center py-3"><Send size={16}/>Envoyer</button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
+            {toast && <Toast msg={toast.msg} type={toast.type}/>}
+        </div>
+    );
+}
+
+// =============================================
+// DASHBOARD TAB
+// =============================================
+function DashboardTab({weekStats,selectedDate,setSelectedDate,theme,handleViewEmpStats,sector,invoices}){
+    const COLORS=['#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444'];
+    const allTimeRevenue=invoices.reduce((a,c)=>a+c.price,0);
+    const allTimeProfit=invoices.reduce((a,c)=>a+(c.profit||0),0);
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div><h2 className="section-title">Dashboard</h2><p className="section-sub">Vue d'ensemble · {sector.label}</p></div>
+                <WeekNav date={selectedDate} onPrev={()=>{const d=new Date(selectedDate);d.setDate(d.getDate()-7);setSelectedDate(d);}} onNext={()=>{const d=new Date(selectedDate);d.setDate(d.getDate()+7);setSelectedDate(d);}}/>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard label="Chiffre d'affaires" value={weekStats.totalRevenue} prefix="€ " icon={TrendingUp} color="indigo" trend={weekStats.revTrend}/>
+                <StatCard label="Bénéfice net" value={weekStats.totalProfit} prefix="€ " icon={Wallet} color="green"/>
+                <StatCard label="Total primes" value={weekStats.totalBonus} prefix="€ " icon={Award} color="purple"/>
+                <StatCard label="Factures émises" value={weekStats.wInv.length} icon={FileText} color="amber" mono={false}/>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Revenue chart */}
+                <div className="card p-5 lg:col-span-2">
+                    <h3 className="font-display font-bold text-white mb-4 flex items-center gap-2"><TrendingUp size={16} style={{color:'var(--accent)'}}/>Activité hebdomadaire</h3>
+                    <div style={{height:220}}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={weekStats.days}>
+                                <defs><linearGradient id="ca" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={theme.accentHex||'#6366f1'} stopOpacity={0.3}/><stop offset="100%" stopColor={theme.accentHex||'#6366f1'} stopOpacity={0}/></linearGradient></defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                                <XAxis dataKey="name" stroke="rgba(255,255,255,0.2)" axisLine={false} tickLine={false} fontSize={12}/>
+                                <YAxis stroke="rgba(255,255,255,0.2)" axisLine={false} tickLine={false} fontSize={12} tickFormatter={v=>`€${fmtMoney(v)}`}/>
+                                <Tooltip contentStyle={{background:'#1a1a2e',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,color:'white'}} formatter={v=>[`€ ${fmtMoney(v)}`,'CA']}/>
+                                <Area type="monotone" dataKey="ca" stroke={theme.accentHex||'#6366f1'} strokeWidth={2.5} fill="url(#ca)" animationDuration={1000}/>
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+                {/* Pie */}
+                <div className="card p-5">
+                    <h3 className="font-display font-bold text-white mb-4 flex items-center gap-2"><PieChart size={16} className="text-purple-400"/>Répartition prestations</h3>
+                    {weekStats.pieData.length>0?(
+                        <div style={{height:180}}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RePieChart>
+                                    <Pie data={weekStats.pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={4} dataKey="value" animationDuration={800}>
+                                        {weekStats.pieData.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]} stroke="none"/>)}
+                                    </Pie>
+                                    <Tooltip contentStyle={{background:'#1a1a2e',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,color:'white'}}/>
+                                </RePieChart>
+                            </ResponsiveContainer>
+                        </div>
+                    ):<div style={{height:180}} className="flex items-center justify-center text-sm" style2={{color:'var(--text-dim)'}}>Aucune donnée</div>}
+                    <div className="space-y-2 mt-2">
+                        {weekStats.pieData.slice(0,4).map((d,i)=>(
+                            <div key={i} className="flex items-center justify-between text-xs">
+                                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full" style={{background:COLORS[i%COLORS.length]}}/><span style={{color:'var(--text-dim)'}}>{d.name}</span></div>
+                                <span className="font-semibold text-white">€ {fmtMoney(d.value)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Employee ranking */}
+            <div className="card overflow-hidden">
+                <div className="p-5 border-b flex items-center justify-between" style={{borderColor:'var(--border)'}}>
+                    <h3 className="font-display font-bold text-white flex items-center gap-2"><Trophy size={16} className="text-amber-400"/>Classement employés</h3>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="data-table">
+                        <thead>
+                            <tr>
+                                <th>#</th><th>Employé</th><th>Grade</th><th>Factures</th>
+                                <th className="text-right">CA</th><th className="text-right">Bénéfice</th><th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {weekStats.empStats.sort((a,b)=>b.revenue-a.revenue).map((emp,i)=>(
+                                <tr key={emp.id}>
+                                    <td><span className="mono font-bold" style={{color:i===0?'#f59e0b':i===1?'#9ca3af':i===2?'#a78bfa':'var(--text-dim)'}}>{i+1}</span></td>
+                                    <td>
+                                        <div className="flex items-center gap-3">
+                                            <div className="relative">
+                                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{background:'linear-gradient(135deg,var(--accent),var(--accent2))'}}>
+                                                    {emp.name.charAt(0)}
+                                                </div>
+                                                {emp.isServiceActive && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2" style={{borderColor:'var(--surface2)'}}/>}
+                                            </div>
+                                            <span className="font-medium text-white">{emp.name}</span>
+                                        </div>
+                                    </td>
+                                    <td><Badge color={getGradeColor(emp.grade)}>{emp.grade}</Badge></td>
+                                    <td><span className="mono">{emp.invoiceCount}</span></td>
+                                    <td className="text-right mono font-bold text-white">€ {fmtMoney(emp.revenue)}</td>
+                                    <td className="text-right mono text-emerald-400 font-bold">€ {fmtMoney(emp.profit)}</td>
+                                    <td>
+                                        <button onClick={()=>handleViewEmpStats(emp)} className="btn btn-ghost text-xs py-1 px-3"><Eye size={13}/>Stats</button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {/* All-time stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="card p-5">
+                    <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{color:'var(--text-dim)'}}>CA Total (Toutes périodes)</p>
+                    <p className="text-3xl font-bold text-white">€ {fmtMoney(allTimeRevenue)}</p>
+                </div>
+                <div className="card p-5">
+                    <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{color:'var(--text-dim)'}}>Bénéfice Total</p>
+                    <p className="text-3xl font-bold text-emerald-400">€ {fmtMoney(allTimeProfit)}</p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// PERSONAL TAB
+// =============================================
+function PersonalTab({target,currentUser,weekStats,selectedDate,setSelectedDate,getPersonalStats,isServiceActive,serviceTimer,serviceStartTime,isBoss,theme,grades,serviceLogs,sector}){
+    const isSelf=target?.id===currentUser?.id;
+    const ps=getPersonalStats(target);
+    const {myInv,revenue,profit,bonusT,maxSalary,targetProfit,progress,isComplete,earnedSalary,totalMs}=ps;
+
+    const actData=DAYS_FR.map((n,i)=>({name:n,ca:myInv.filter(inv=>new Date(inv.date).getDay()===(i+1)%7).reduce((a,c)=>a+c.price,0)}));
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div>
+                    <h2 className="section-title">{isSelf?`Bonjour, ${target.name.split(' ')[0]} 👋`:`Fiche — ${target.name}`}</h2>
+                    <p className="section-sub">{isSelf?'Vos performances personnelles.':'Supervision · Mode admin'}</p>
+                </div>
+                <WeekNav date={selectedDate} onPrev={()=>{const d=new Date(selectedDate);d.setDate(d.getDate()-7);setSelectedDate(d);}} onNext={()=>{const d=new Date(selectedDate);d.setDate(d.getDate()+7);setSelectedDate(d);}}/>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="card p-5">
+                    <div className="flex justify-between items-start mb-3">
+                        <p className="text-xs font-bold uppercase tracking-widest" style={{color:'var(--text-dim)'}}>Heures service</p>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background:'rgba(59,130,246,0.15)',color:'#60a5fa'}}><Clock size={16}/></div>
+                    </div>
+                    <p className="text-2xl font-bold text-white mono">{fmtDuration(totalMs)}</p>
+                    {isSelf&&isServiceActive&&<p className="text-xs mt-1 text-emerald-400 flex items-center gap-1"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"/>En cours : +{fmtDuration(serviceTimer)}</p>}
+                </div>
+
+                <div className="card p-5">
+                    <div className="flex justify-between items-start mb-3">
+                        <p className="text-xs font-bold uppercase tracking-widest" style={{color:'var(--text-dim)'}}>Objectif rentabilité</p>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isComplete?'text-emerald-400':'text-amber-400'}`} style={{background:isComplete?'rgba(16,185,129,0.15)':'rgba(245,158,11,0.15)'}}><Target size={16}/></div>
+                    </div>
+                    <p className="text-xl font-bold text-white">€ {fmtMoney(profit)} <span className="text-sm font-normal" style={{color:'var(--text-dim)'}}>/ € {fmtMoney(targetProfit)}</span></p>
+                    {targetProfit>0&&<><div className="progress-track mt-3"><div className="progress-fill" style={{width:`${progress}%`,background:isComplete?'linear-gradient(90deg,#10b981,#34d399)':'linear-gradient(90deg,var(--accent),var(--accent2))'}}></div></div><p className="text-xs mt-1 text-right" style={{color:'var(--text-dim)'}}>{Math.round(progress)}%</p></>}
+                </div>
+
+                <div className="card p-5">
+                    <div className="flex justify-between items-start mb-3">
+                        <p className="text-xs font-bold uppercase tracking-widest" style={{color:'var(--text-dim)'}}>CA semaine</p>
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background:'rgba(99,102,241,0.15)',color:'var(--accent)'}}><Activity size={16}/></div>
+                    </div>
+                    <p className="text-2xl font-bold text-white">€ {fmtMoney(revenue)}</p>
+                    <p className="text-xs mt-1" style={{color:'var(--text-dim)'}}>{myInv.length} {sector.invoiceLabel.toLowerCase()}(s)</p>
+                </div>
+
+                <div className={`card p-5 border-l-2 ${isComplete?'border-l-emerald-500':'border-l-amber-500'}`}>
+                    <div className="flex justify-between items-start mb-3">
+                        <p className="text-xs font-bold uppercase tracking-widest" style={{color:'var(--text-dim)'}}>Paie estimée</p>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isComplete?'text-emerald-400':'text-amber-400'}`} style={{background:isComplete?'rgba(16,185,129,0.15)':'rgba(245,158,11,0.15)'}}>{isComplete?<Unlock size={16}/>:<Lock size={16}/>}</div>
+                    </div>
+                    <p className="text-2xl font-bold text-white">€ {fmtMoney(earnedSalary+(isComplete?bonusT:0))}</p>
+                    <div className={`text-xs mt-2 flex items-center gap-1 ${isComplete?'text-emerald-400':'text-amber-500'}`}>
+                        {isComplete?<><CheckCircle size={11}/>Prime € {fmtMoney(bonusT)} débloquée</>:<><Lock size={11}/>Prime € {fmtMoney(bonusT)} bloquée</>}
+                    </div>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="card overflow-hidden lg:col-span-2">
+                    <div className="p-5 border-b" style={{borderColor:'var(--border)'}}>
+                        <h3 className="font-display font-bold text-white">Mes {sector.invoiceLabel.toLowerCase()}s de la semaine</h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="data-table">
+                            <thead><tr><th>Date</th><th>Client</th><th>Type</th><th className="text-right">Prix</th><th className="text-right">Prime</th></tr></thead>
+                            <tbody>
+                                {myInv.map(inv=>(
+                                    <tr key={inv.id}>
+                                        <td className="text-xs" style={{color:'var(--text-dim)'}}>{fmtDate(inv.date)}</td>
+                                        <td className="font-medium text-white">{inv.client}</td>
+                                        <td><Badge color="gray">{inv.type}</Badge></td>
+                                        <td className="text-right mono font-bold text-white">€ {fmtMoney(inv.price)}</td>
+                                        <td className="text-right mono text-emerald-400 font-bold">+€ {fmtMoney(inv.bonus)}</td>
+                                    </tr>
+                                ))}
+                                {myInv.length===0&&<tr><td colSpan={5} className="text-center py-8 text-sm" style={{color:'var(--text-dim)'}}>Aucune facture cette semaine.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div className="card p-5">
+                    <h3 className="font-display font-bold text-white mb-4">Activité jour par jour</h3>
+                    <div style={{height:200}}>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <ReBarChart data={actData}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false}/>
+                                <XAxis dataKey="name" stroke="rgba(255,255,255,0.2)" axisLine={false} tickLine={false} fontSize={11}/>
+                                <Tooltip contentStyle={{background:'#1a1a2e',border:'1px solid rgba(255,255,255,0.1)',borderRadius:10,color:'white'}} formatter={v=>[`€ ${fmtMoney(v)}`,'CA']}/>
+                                <Bar dataKey="ca" fill="var(--accent)" radius={[4,4,0,0]} animationDuration={800}/>
+                            </ReBarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// INVOICE TAB
+// =============================================
+function InvoiceTab({newInvoice,setNewInvoice,handleCreateInvoice,config,calcMetrics,uniqueClients,theme,sector}){
+    const m=calcMetrics(newInvoice.type,newInvoice.price);
+    const price=parseFloat(newInvoice.price)||0;
+    return (
+        <div className="max-w-2xl mx-auto space-y-6">
+            <div><h2 className="section-title">Nouvelle {sector.invoiceLabel}</h2><p className="section-sub">Enregistrement rapide · Calcul automatique</p></div>
+            <div className="card p-6 space-y-5">
+                <div>
+                    <Input label={`Client / ${sector.invoiceLabel}`} required value={newInvoice.client} onChange={e=>setNewInvoice({...newInvoice,client:e.target.value})} placeholder="Nom du client ou entreprise" list="cl-list" prefix={User}/>
+                    <datalist id="cl-list">{uniqueClients.map((c,i)=><option key={i} value={c}/>)}</datalist>
+                </div>
+                <Select label="Type de prestation *" required options={(config.services||[]).map(s=>s.name)} value={newInvoice.type} onChange={e=>setNewInvoice({...newInvoice,type:e.target.value})}/>
+                <Input label="Montant (€) *" required type="number" prefix={DollarSign} placeholder="0.00" value={newInvoice.price} onChange={e=>setNewInvoice({...newInvoice,price:e.target.value})}/>
+
+                {price>0 && (
+                    <div className="rounded-xl p-4 space-y-2" style={{background:'rgba(0,0,0,0.3)',border:'1px solid rgba(255,255,255,0.06)'}}>
+                        <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{color:'var(--text-dim)'}}>Estimation automatique</p>
+                        <div className="flex justify-between text-sm">
+                            <span style={{color:'var(--text-dim)'}}>Prix facturé</span><span className="text-white mono">€ {fmtMoney(price)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                            <span style={{color:'var(--text-dim)'}}>Charges / taxes ({m.cost}%)</span><span className="text-red-400 mono">− € {fmtMoney(m.costAmt)}</span>
+                        </div>
+                        <div className="h-px" style={{background:'var(--border)'}}/>
+                        <div className="flex justify-between font-bold">
+                            <span className="text-white">Bénéfice net</span><span className="text-emerald-400 mono text-lg">€ {fmtMoney(m.profit)}</span>
+                        </div>
+                    </div>
+                )}
+
+                <button onClick={handleCreateInvoice} className="btn btn-primary w-full justify-center py-3 text-base"><Save size={18}/>Enregistrer</button>
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// HISTORY TAB
+// =============================================
+function HistoryTab({invoices,weekStats,selectedDate,setSelectedDate,histSearch,setHistSearch,histFilter,setHistFilter,handleDeleteInvoice,isBoss,currentUser,config,editingInvoiceId,setEditingInvoiceId,editClientName,setEditClientName,handleUpdateInvoiceClient,theme,sector,genInvoicePDF,genExcelCSV}){
+    const filtered=weekStats.wInv.filter(inv=>{
+        const ms=inv.client?.toLowerCase().includes(histSearch.toLowerCase())||inv.employeeName?.toLowerCase().includes(histSearch.toLowerCase());
+        const mf=histFilter?inv.type===histFilter:true;
+        return ms&&mf;
+    });
+    return (
+        <div className="space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div><h2 className="section-title">Historique</h2><p className="section-sub">{filtered.length} {sector.invoiceLabel.toLowerCase()}(s) · semaine sélectionnée</p></div>
+                <WeekNav date={selectedDate} onPrev={()=>{const d=new Date(selectedDate);d.setDate(d.getDate()-7);setSelectedDate(d);}} onNext={()=>{const d=new Date(selectedDate);d.setDate(d.getDate()+7);setSelectedDate(d);}}/>
+            </div>
+            <div className="flex gap-3 flex-wrap">
+                <div className="relative flex-1 min-w-48">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:'var(--text-dim)'}}/>
+                    <input className="input-base pl-9" placeholder="Rechercher..." value={histSearch} onChange={e=>setHistSearch(e.target.value)}/>
+                </div>
+                <div className="relative">
+                    <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{color:'var(--text-dim)'}}/>
+                    <select className="input-base pl-9 pr-8" style={{appearance:'none',minWidth:140}} value={histFilter} onChange={e=>setHistFilter(e.target.value)}>
+                        <option value="">Tout voir</option>
+                        {(config.services||[]).map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
+                    </select>
+                    <ChevronDown size={13} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{color:'var(--text-dim)'}}/>
+                </div>
+                <button onClick={()=>genExcelCSV(filtered,`export_semaine.csv`)} className="btn btn-ghost"><FileSpreadsheet size={15}/>Export CSV</button>
+            </div>
+            <div className="card overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="data-table">
+                        <thead><tr>
+                            <th>Date</th><th>Client</th><th>Type</th><th className="text-right">Prix</th>
+                            {isBoss&&<th className="text-right">Bénéfice</th>}
+                            <th>Employé</th><th className="text-center">Actions</th>
+                        </tr></thead>
+                        <tbody>
+                            {filtered.map(inv=>(
+                                <tr key={inv.id}>
+                                    <td className="text-xs" style={{color:'var(--text-dim)'}}>{fmtDate(inv.date)} {fmtTime(inv.date)}</td>
+                                    <td>
+                                        {editingInvoiceId===inv.id?(
+                                            <div className="flex items-center gap-1">
+                                                <input autoFocus className="input-base py-1 text-sm w-32" value={editClientName} onChange={e=>setEditClientName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')handleUpdateInvoiceClient(inv.id);if(e.key==='Escape'){setEditingInvoiceId(null);setEditClientName('');}}}/>
+                                                <button onClick={()=>handleUpdateInvoiceClient(inv.id)} className="text-emerald-400"><CheckCircle size={15}/></button>
+                                                <button onClick={()=>{setEditingInvoiceId(null);setEditClientName('');}} className="text-red-400"><XCircle size={15}/></button>
+                                            </div>
+                                        ):(
+                                            <div className="flex items-center gap-2 group">
+                                                <span className="font-medium text-white">{inv.client}</span>
+                                                {(isBoss||inv.employeeId===currentUser?.id)&&<button onClick={()=>{setEditingInvoiceId(inv.id);setEditClientName(inv.client);}} className="opacity-0 group-hover:opacity-100 transition-opacity" style={{color:'var(--text-dim)'}}><Edit size={13}/></button>}
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td><Badge color="gray">{inv.type}</Badge></td>
+                                    <td className="text-right mono font-bold text-white">€ {fmtMoney(inv.price)}</td>
+                                    {isBoss&&<td className={`text-right mono font-bold ${(inv.profit||0)>=0?'text-emerald-400':'text-red-400'}`}>€ {fmtMoney(inv.profit)}</td>}
+                                    <td className="text-sm" style={{color:'var(--text-dim)'}}>{inv.employeeName}</td>
+                                    <td>
+                                        <div className="flex items-center justify-center gap-1">
+                                            <button onClick={()=>genInvoicePDF(inv,{})} className="btn btn-ghost py-1 px-2 text-xs"><Download size={13}/></button>
+                                            {isBoss&&<button onClick={()=>handleDeleteInvoice(inv.id)} className="btn btn-danger py-1 px-2 text-xs"><Trash2 size={13}/></button>}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {filtered.length===0&&<tr><td colSpan={8} className="text-center py-10 text-sm" style={{color:'var(--text-dim)'}}>Aucune facture trouvée.</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// CLIENTS TAB
+// =============================================
+function ClientsTab({clientStats,invoices,clientSearch,setClientSearch,selectedClient,setSelectedClient,handleRenameClient,isBoss,theme,genInvoicePDF}){
+    const [renaming,setRenaming]=useState(false);
+    const [renameVal,setRenameVal]=useState('');
+
+    const filtered=clientStats.filter(c=>c.name.toLowerCase().includes(clientSearch.toLowerCase()));
+
+    if(selectedClient){
+        const cInv=invoices.filter(i=>i.client?.trim()===selectedClient.name).sort((a,b)=>new Date(b.date)-new Date(a.date));
+        const avg=selectedClient.visitCount>0?selectedClient.totalSpent/selectedClient.visitCount:0;
+        const isVIP=selectedClient.totalSpent>20000;
+        const isRegular=selectedClient.visitCount>3;
+        return (
+            <div className="space-y-6 anim-in">
+                <button onClick={()=>{setSelectedClient(null);setRenaming(false);}} className="flex items-center gap-2 text-sm transition-colors hover:text-white" style={{color:'var(--text-dim)'}}><ChevronLeft size={16}/>Retour à la liste</button>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-bold text-white" style={{background:'linear-gradient(135deg,var(--accent),var(--accent2))'}}>
+                            {selectedClient.name.charAt(0)}
+                        </div>
+                        <div>
+                            {renaming?(
+                                <div className="flex items-center gap-2">
+                                    <input autoFocus className="input-base text-xl font-bold py-1" value={renameVal} onChange={e=>setRenameVal(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'){handleRenameClient(selectedClient.name,renameVal);setRenaming(false);}if(e.key==='Escape')setRenaming(false);}} style={{width:'200px'}}/>
+                                    <button onClick={()=>{handleRenameClient(selectedClient.name,renameVal);setRenaming(false);}} className="text-emerald-400"><CheckCircle size={18}/></button>
+                                    <button onClick={()=>setRenaming(false)} className="text-red-400"><XCircle size={18}/></button>
+                                </div>
+                            ):(
+                                <h2 className="text-2xl font-bold text-white flex items-center gap-3 group">
+                                    {selectedClient.name}
+                                    {isBoss&&<button onClick={()=>{setRenameVal(selectedClient.name);setRenaming(true);}} className="opacity-0 group-hover:opacity-100 transition-opacity" style={{color:'var(--text-dim)'}}><Edit size={16}/></button>}
+                                </h2>
+                            )}
+                            <p className="text-sm" style={{color:'var(--text-dim)'}}>Client depuis le {fmtDate(selectedClient.firstVisit)}</p>
+                        </div>
+                    </div>
+                    <Badge color={isVIP?'amber':isRegular?'blue':'gray'}>{isVIP?'⭐ VIP':isRegular?'Régulier':'Nouveau'}</Badge>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <StatCard label="Total dépensé" value={selectedClient.totalSpent} prefix="€ " icon={Wallet} color="indigo"/>
+                    <StatCard label="Visites" value={selectedClient.visitCount} icon={History} color="blue" mono={false}/>
+                    <StatCard label="Panier moyen" value={avg} prefix="€ " icon={Calculator} color="green"/>
+                </div>
+                <div className="card overflow-hidden">
+                    <div className="p-5 border-b" style={{borderColor:'var(--border)'}}><h3 className="font-bold text-white">Historique complet</h3></div>
+                    <div className="overflow-x-auto">
+                        <table className="data-table">
+                            <thead><tr><th>Date</th><th>Prestation</th><th>Employé</th><th className="text-right">Montant</th><th/></tr></thead>
+                            <tbody>
+                                {cInv.map(inv=>(
+                                    <tr key={inv.id}>
+                                        <td className="text-xs" style={{color:'var(--text-dim)'}}>{fmtDate(inv.date)}</td>
+                                        <td><Badge color="gray">{inv.type}</Badge></td>
+                                        <td className="text-sm" style={{color:'var(--text-dim)'}}>{inv.employeeName}</td>
+                                        <td className="text-right mono font-bold text-white">€ {fmtMoney(inv.price)}</td>
+                                        <td><button onClick={()=>genInvoicePDF(inv,{})} className="btn btn-ghost py-1 px-2 text-xs"><Download size={13}/></button></td>
+                                    </tr>
+                                ))}
+                                {cInv.length===0&&<tr><td colSpan={5} className="text-center py-8 text-sm" style={{color:'var(--text-dim)'}}>Aucune facture.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div><h2 className="section-title">Base Clients</h2><p className="section-sub">{clientStats.length} clients · triés par volume</p></div>
+                <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:'var(--text-dim)'}}/>
+                    <input className="input-base pl-9" placeholder="Rechercher..." value={clientSearch} onChange={e=>setClientSearch(e.target.value)} style={{width:220}}/>
+                </div>
+            </div>
+            <div className="card overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="data-table">
+                        <thead><tr><th>Client</th><th className="text-center">Visites</th><th className="text-right">Total dépensé</th><th className="text-right">Panier moy.</th><th className="text-right">Dernière visite</th><th/></tr></thead>
+                        <tbody>
+                            {filtered.map((c,i)=>{
+                                const isVIP=c.totalSpent>20000;
+                                const isReg=c.visitCount>3;
+                                return (
+                                    <tr key={i} onClick={()=>setSelectedClient(c)} style={{cursor:'pointer'}}>
+                                        <td>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white" style={{background:'linear-gradient(135deg,var(--accent),var(--accent2))'}}>
+                                                    {c.name.charAt(0)}
+                                                </div>
+                                                <span className="font-medium text-white">{c.name}</span>
+                                                {isVIP&&<span className="text-amber-400 text-sm">⭐</span>}
+                                            </div>
+                                        </td>
+                                        <td className="text-center mono">{c.visitCount}</td>
+                                        <td className="text-right mono font-bold text-white">€ {fmtMoney(c.totalSpent)}</td>
+                                        <td className="text-right mono" style={{color:'var(--text-dim)'}}>€ {fmtMoney(c.visitCount>0?c.totalSpent/c.visitCount:0)}</td>
+                                        <td className="text-right text-sm" style={{color:'var(--text-dim)'}}>{fmtDate(c.lastVisit)}</td>
+                                        <td><ChevronRight size={16} style={{color:'var(--text-dim)'}}/></td>
+                                    </tr>
+                                );
+                            })}
+                            {filtered.length===0&&<tr><td colSpan={6} className="text-center py-10 text-sm" style={{color:'var(--text-dim)'}}>Aucun client trouvé.</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// TASKS TAB (KANBAN)
+// =============================================
+function TasksTab({tasks,newTask,setNewTask,handleAddTask,handleUpdateTask,handleDeleteTask,employees,currentUser,taskFilter,setTaskFilter,isBoss,theme}){
+    const STATUSES=['todo','inprogress','done'];
+    const STATUS_LABELS={'todo':'À faire','inprogress':'En cours','done':'Terminé'};
+    const STATUS_COLORS={'todo':'blue','inprogress':'amber','done':'green'};
+    const PRIORITIES={low:{label:'Basse',color:'gray'},medium:{label:'Normale',color:'blue'},high:{label:'Haute',color:'amber'},urgent:{label:'Urgent',color:'red'}};
+
+    const myTasks=taskFilter==='mine'?tasks.filter(t=>t.assignee===currentUser.id):tasks;
+    const getCol=status=>myTasks.filter(t=>t.status===status);
+
+    const moveTask=(id,newStatus)=>handleUpdateTask(id,{status:newStatus});
+
+    return (
+        <div className="space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div><h2 className="section-title">Tâches & Projets</h2><p className="section-sub">Kanban · {tasks.length} tâches au total</p></div>
+                <div className="tab-group">
+                    <div className={`tab-item ${taskFilter==='all'?'active':''}`} onClick={()=>setTaskFilter('all')}>Toutes</div>
+                    <div className={`tab-item ${taskFilter==='mine'?'active':''}`} onClick={()=>setTaskFilter('mine')}>Mes tâches</div>
+                </div>
+            </div>
+
+            {/* Create task */}
+            <div className="card p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                    <div className="sm:col-span-2"><Input placeholder="Titre de la tâche..." value={newTask.title} onChange={e=>setNewTask({...newTask,title:e.target.value})}/></div>
+                    <select className="input-base" value={newTask.assignee} onChange={e=>setNewTask({...newTask,assignee:e.target.value})}>
+                        <option value="">Assigner à...</option>
+                        {employees.map(e=><option key={e.id} value={e.id}>{e.name}</option>)}
+                    </select>
+                    <select className="input-base" value={newTask.priority} onChange={e=>setNewTask({...newTask,priority:e.target.value})}>
+                        {Object.entries(PRIORITIES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                    <button onClick={handleAddTask} className="btn btn-primary justify-center"><Plus size={15}/>Ajouter</button>
+                </div>
+            </div>
+
+            {/* Kanban */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {STATUSES.map(status=>{
+                    const col=getCol(status);
+                    return (
+                        <div key={status} className="kanban-col p-3">
+                            <div className="flex items-center gap-2 mb-3 px-1">
+                                <Badge color={STATUS_COLORS[status]}>{STATUS_LABELS[status]}</Badge>
+                                <span className="text-xs font-bold ml-auto" style={{color:'var(--text-dim)'}}>{col.length}</span>
+                            </div>
+                            <div className="space-y-2">
+                                {col.map(t=>{
+                                    const assignee=employees.find(e=>e.id===t.assignee);
+                                    const p=PRIORITIES[t.priority||'medium'];
+                                    return (
+                                        <div key={t.id} className="kanban-card p-3">
+                                            <div className="flex items-start justify-between gap-2 mb-2">
+                                                <p className="text-sm font-medium text-white flex-1">{t.title}</p>
+                                                {(isBoss||t.createdBy===currentUser.id)&&<button onClick={()=>handleDeleteTask(t.id)} style={{color:'var(--text-dim)'}} className="hover:text-red-400 transition-colors flex-shrink-0"><X size={14}/></button>}
+                                            </div>
+                                            {t.desc&&<p className="text-xs mb-2" style={{color:'var(--text-dim)'}}>{t.desc}</p>}
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Badge color={p.color}>{p.label}</Badge>
+                                                    {assignee&&<span className="text-xs" style={{color:'var(--text-dim)'}}>{assignee.name.split(' ')[0]}</span>}
+                                                </div>
+                                                <select className="text-xs rounded px-1 py-0.5" style={{background:'rgba(0,0,0,0.3)',border:'1px solid rgba(255,255,255,0.1)',color:'var(--text-dim)'}} value={t.status} onChange={e=>moveTask(t.id,e.target.value)}>
+                                                    {STATUSES.map(s=><option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {col.length===0&&<div className="plan-slot p-4 text-center text-xs" style={{color:'var(--text-dim)'}}>Aucune tâche</div>}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// PLANNING TAB
+// =============================================
+function PlanningTab({employees,serviceLogs,planDate,setPlanDate,theme}){
+    const s=sw(planDate), e=ew(planDate);
+
+    const getEmpLogs = emp => {
+        return serviceLogs.filter(l=>{
+            const d=new Date(l.date);
+            return l.employeeId===emp.id&&d>=s&&d<=e;
+        });
+    };
+
+    const getDayLogs = (emp,dayIdx) => {
+        return getEmpLogs(emp).filter(l=>{
+            const d=new Date(l.date);
+            const adjDay=dayIdx===0?1:dayIdx===1?2:dayIdx===2?3:dayIdx===3?4:dayIdx===4?5:dayIdx===5?6:0;
+            return d.getDay()===adjDay;
+        });
+    };
+
+    return (
+        <div className="space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div><h2 className="section-title">Planning</h2><p className="section-sub">Présence & heures de service</p></div>
+                <WeekNav date={planDate} onPrev={()=>{const d=new Date(planDate);d.setDate(d.getDate()-7);setPlanDate(d);}} onNext={()=>{const d=new Date(planDate);d.setDate(d.getDate()+7);setPlanDate(d);}}/>
+            </div>
+
+            <div className="card overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="data-table" style={{minWidth:'700px'}}>
+                        <thead>
+                            <tr>
+                                <th className="sticky-th" style={{background:'var(--surface2)',minWidth:'140px'}}>Employé</th>
+                                {DAYS_FULL.map((d,i)=>{
+                                    const date=new Date(s);date.setDate(date.getDate()+i);
+                                    return <th key={i} className="text-center" style={{minWidth:'90px'}}><div>{d}</div><div className="text-xs mono font-normal" style={{color:'var(--text-dim)'}}>{fmt(date)}</div></th>;
+                                })}
+                                <th className="text-right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {employees.map(emp=>{
+                                const allLogs=getEmpLogs(emp);
+                                const total=allLogs.reduce((a,l)=>a+l.duration,0);
+                                return (
+                                    <tr key={emp.id}>
+                                        <td>
+                                            <div className="flex items-center gap-2">
+                                                <div className="relative">
+                                                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{background:'linear-gradient(135deg,var(--accent),var(--accent2))'}}>
+                                                        {emp.name.charAt(0)}
+                                                    </div>
+                                                    {emp.isServiceActive&&<div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border" style={{borderColor:'var(--surface2)'}}/>}
+                                                </div>
+                                                <div>
+                                                    <div className="text-sm font-medium text-white">{emp.name}</div>
+                                                    <div className="text-xs" style={{color:'var(--text-dim)'}}>{emp.grade}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        {[0,1,2,3,4,5,6].map(di=>{
+                                            const logs=getDayLogs(emp,di);
+                                            const ms=logs.reduce((a,l)=>a+l.duration,0);
+                                            return (
+                                                <td key={di} className="text-center">
+                                                    {ms>0?(
+                                                        <div className="plan-shift inline-flex items-center justify-center px-2 py-1 text-xs font-bold" style={{color:'var(--accent)'}}>
+                                                            {fmtDuration(ms)}
+                                                        </div>
+                                                    ):<span style={{color:'rgba(255,255,255,0.1)'}}>—</span>}
+                                                </td>
+                                            );
+                                        })}
+                                        <td className="text-right mono font-bold" style={{color:total>0?'white':'var(--text-dim)'}}>
+                                            {total>0?fmtDuration(total):'—'}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// CONTRACTS TAB
+// =============================================
+function ContractsTab({contracts,newContract,setNewContract,handleSaveContract,handleDeleteContract,editingContract,setEditingContract,isBoss,theme}){
+    const [tempDoc,setTempDoc]=useState({name:'',url:''});
+    const [confirmDel,setConfirmDel]=useState(null);
+
+    const startEdit=(c)=>{ setEditingContract(c); setNewContract({company:c.company,date:c.date,endDate:c.endDate||'',value:c.value||'',description:c.description,url:c.url,supplementaryDocs:c.supplementaryDocs||[]}); };
+    const cancelEdit=()=>{ setEditingContract(null); setNewContract({company:'',date:'',endDate:'',value:'',description:'',url:'',supplementaryDocs:[]}); };
+    const addDoc=()=>{ if(tempDoc.name&&tempDoc.url){ setNewContract({...newContract,supplementaryDocs:[...newContract.supplementaryDocs,tempDoc]}); setTempDoc({name:'',url:''}); } };
+
+    return (
+        <div className="space-y-5 max-w-6xl">
+            <div><h2 className="section-title">Contrats & Partenariats</h2><p className="section-sub">Gestion des accords commerciaux</p></div>
+
+            {isBoss && (
+                <div className="card p-5 space-y-4">
+                    <h3 className="font-bold text-white">{editingContract?'Modifier contrat':'Nouveau contrat'}</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <Input label="Entreprise / Partenaire *" value={newContract.company} onChange={e=>setNewContract({...newContract,company:e.target.value})} prefix={Building}/>
+                        <Input label="Date début" type="date" value={newContract.date} onChange={e=>setNewContract({...newContract,date:e.target.value})}/>
+                        <Input label="Date fin" type="date" value={newContract.endDate} onChange={e=>setNewContract({...newContract,endDate:e.target.value})}/>
+                        <Input label="Valeur du contrat (€)" type="number" value={newContract.value} onChange={e=>setNewContract({...newContract,value:e.target.value})} prefix={DollarSign}/>
+                        <div className="sm:col-span-2"><Input label="Lien document" type="url" value={newContract.url} onChange={e=>setNewContract({...newContract,url:e.target.value})} prefix={ExternalLink} placeholder="https://..."/></div>
+                    </div>
+                    <Input label="Description / Conditions" value={newContract.description} onChange={e=>setNewContract({...newContract,description:e.target.value})} rows={2} placeholder="Détails du contrat..."/>
+                    <div>
+                        <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{color:'var(--text-dim)'}}>Documents annexes</p>
+                        <div className="flex gap-2 mb-2">
+                            <input className="input-base flex-1" placeholder="Nom du doc" value={tempDoc.name} onChange={e=>setTempDoc({...tempDoc,name:e.target.value})}/>
+                            <input className="input-base flex-1" placeholder="URL" value={tempDoc.url} onChange={e=>setTempDoc({...tempDoc,url:e.target.value})}/>
+                            <button onClick={addDoc} className="btn btn-ghost"><Plus size={15}/></button>
+                        </div>
+                        {newContract.supplementaryDocs.map((d,i)=><div key={i} className="text-xs flex items-center gap-2 mb-1" style={{color:'var(--text-dim)'}}><Paperclip size={11}/>{d.name}</div>)}
+                    </div>
+                    <div className="flex gap-3">
+                        {editingContract&&<button onClick={cancelEdit} className="btn btn-ghost">Annuler</button>}
+                        <button onClick={handleSaveContract} className="btn btn-primary">{editingContract?<><Save size={15}/>Sauvegarder</>:<><Plus size={15}/>Ajouter</>}</button>
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {contracts.map(c=>{
+                    const expired=c.endDate&&new Date(c.endDate)<new Date();
+                    return (
+                        <div key={c.id} className="card p-5 space-y-4" style={{borderColor:expired?'rgba(239,68,68,0.2)':'var(--border)'}}>
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{background:expired?'rgba(239,68,68,0.1)':'rgba(99,102,241,0.1)',color:expired?'#f87171':'var(--accent)'}}><Building size={20}/></div>
+                                    <div>
+                                        <h4 className="font-bold text-white">{c.company}</h4>
+                                        <div className="flex items-center gap-3 text-xs mt-0.5" style={{color:'var(--text-dim)'}}>
+                                            <span>{fmtDate(c.date)}{c.endDate&&` → ${fmtDate(c.endDate)}`}</span>
+                                            {c.value&&<span className="mono text-white">€ {fmtMoney(c.value)}</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Badge color={expired?'red':'green'}>{expired?'Expiré':'Actif'}</Badge>
+                                    {isBoss&&<>
+                                        <button onClick={()=>startEdit(c)} className="btn btn-ghost py-1 px-2"><Edit size={13}/></button>
+                                        {confirmDel===c.id?<button onClick={()=>{handleDeleteContract(c.id);setConfirmDel(null);}} className="btn btn-danger py-1 px-2 text-xs">Confirmer</button>:<button onClick={()=>{setConfirmDel(c.id);setTimeout(()=>setConfirmDel(null),3000);}} className="btn btn-ghost py-1 px-2"><Trash2 size={13}/></button>}
+                                    </>}
+                                </div>
+                            </div>
+                            {c.description&&<p className="text-sm" style={{color:'var(--text-dim)',lineHeight:1.6}}>{c.description}</p>}
+                            <div className="flex gap-2 flex-wrap">
+                                {c.url&&<a href={c.url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost text-xs py-1.5 px-3"><FileText size={13}/>Document principal</a>}
+                                {(c.supplementaryDocs||[]).map((d,i)=><a key={i} href={d.url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost text-xs py-1.5 px-3"><Paperclip size={13}/>{d.name}</a>)}
+                            </div>
+                        </div>
+                    );
+                })}
+                {contracts.length===0&&<div className="card p-10 text-center text-sm col-span-2" style={{color:'var(--text-dim)'}}>Aucun contrat enregistré.</div>}
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// TARIFS TAB
+// =============================================
+function TarifsTab({config,handleSaveConfig,isEditingPrices,setIsEditingPrices,isBoss,theme}){
+    const prices=(config.priceList||[{category:'Prestations',items:[{name:'Service Standard',price:100},{name:'Service Premium',price:250}]}]);
+    const setPrices=newList=>handleSaveConfig({...config,priceList:newList});
+
+    return (
+        <div className="space-y-5 max-w-4xl">
+            <div className="flex items-end justify-between">
+                <div><h2 className="section-title">Grille Tarifaire</h2><p className="section-sub">Tarifs officiels de l'entreprise</p></div>
+                {isBoss&&<button onClick={()=>setIsEditingPrices(!isEditingPrices)} className={`btn ${isEditingPrices?'btn-primary':'btn-ghost'}`}>{isEditingPrices?<><CheckCircle size={15}/>Terminer</>:<><Edit size={15}/>Modifier</>}</button>}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {prices.map((cat,ci)=>(
+                    <div key={ci} className="card overflow-hidden">
+                        <div className="p-4 border-b" style={{borderColor:'var(--border)',background:'rgba(0,0,0,0.2)'}}>
+                            <h3 className="font-bold text-white">{cat.category}</h3>
+                        </div>
+                        <div>
+                            {cat.items.map((item,ii)=>(
+                                <div key={ii} className="p-4 flex justify-between items-center border-b" style={{borderColor:'rgba(255,255,255,0.03)'}}>
+                                    {isEditingPrices?(
+                                        <div className="flex items-center gap-2 w-full">
+                                            <input className="input-base py-1 text-sm flex-1" value={item.name} onChange={e=>{const n=[...prices];n[ci].items[ii].name=e.target.value;setPrices(n);}}/>
+                                            <input type="number" className="input-base py-1 text-sm w-20 text-right mono" value={item.price} onChange={e=>{const n=[...prices];n[ci].items[ii].price=parseFloat(e.target.value)||0;setPrices(n);}}/>
+                                            <button onClick={()=>{const n=[...prices];n[ci].items.splice(ii,1);setPrices(n);}} className="text-red-400 hover:text-red-300"><Trash2 size={14}/></button>
+                                        </div>
+                                    ):(
+                                        <><span className="text-sm" style={{color:'var(--text)'}}>{item.name}</span><span className="mono font-bold text-white">€ {fmtMoney(item.price)}</span></>
+                                    )}
+                                </div>
+                            ))}
+                            {isEditingPrices&&<button onClick={()=>{const n=[...prices];n[ci].items.push({name:'Nouvelle ligne',price:0});setPrices(n);}} className="w-full p-3 text-xs text-center transition-colors hover:text-white" style={{color:'var(--text-dim)',borderTop:'2px dashed rgba(255,255,255,0.06)'}}>+ Ajouter</button>}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// AIDE TAB
+// =============================================
+function AideTab({customMessages,setCustomMessages,isEditingMessages,setIsEditingMessages,handleSaveMessages,isBoss,theme}){
+    const cmds=[
+        {cat:'Workflow',items:['/workflow:clear','workflow:close','/workflow:cursor','/workflow:open']},
+        {cat:'Système',items:['/body:cancel','/component:cancel','/service:start','/service:stop']},
+    ];
+    return (
+        <div className="space-y-5 max-w-3xl">
+            <div><h2 className="section-title">Aide & Ressources</h2><p className="section-sub">Commandes utiles et messages prédéfinis</p></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {cmds.map((g,i)=>(
+                    <div key={i} className="card p-5">
+                        <h3 className="font-bold text-white mb-3 flex items-center gap-2"><Terminal size={16} style={{color:'var(--accent)'}}/>Commandes {g.cat}</h3>
+                        <div className="space-y-2">
+                            {g.items.map((c,j)=>(
+                                <div key={j} className="flex items-center justify-between p-2 rounded-lg" style={{background:'rgba(0,0,0,0.3)'}}>
+                                    <code className="text-sm" style={{color:'#86efac',fontFamily:'JetBrains Mono,monospace'}}>{c}</code>
+                                    <button onClick={()=>{navigator.clipboard.writeText(c);}} className="btn btn-ghost py-0.5 px-2 text-xs"><Copy size={11}/></button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-bold text-white flex items-center gap-2"><MessageSquare size={16} className="text-purple-400"/>Messages prédéfinis</h3>
+                    {isBoss&&<button onClick={()=>{if(isEditingMessages)handleSaveMessages();else setIsEditingMessages(true);}} className="btn btn-ghost text-xs py-1 px-3">
+                        {isEditingMessages?<><Save size={13}/>Sauvegarder</>:<><Edit size={13}/>Modifier</>}
+                    </button>}
+                </div>
+                <div className="space-y-3">
+                    {['open','close'].map(k=>(
+                        <div key={k} className="p-4 rounded-xl flex items-center gap-4" style={{background:'rgba(0,0,0,0.3)'}}>
+                            <div className="flex-1">
+                                <p className="text-xs font-bold uppercase mb-1" style={{color:k==='open'?'#34d399':'#f87171'}}>{k==='open'?'Ouverture':'Fermeture'}</p>
+                                {isEditingMessages?<textarea className="input-base text-sm" value={customMessages[k]} onChange={e=>setCustomMessages({...customMessages,[k]:e.target.value})} rows={2}/>:<p className="text-sm italic" style={{color:'var(--text)'}}>{customMessages[k]}</p>}
+                            </div>
+                            {!isEditingMessages&&<button onClick={()=>{navigator.clipboard.writeText(customMessages[k]);}} className="btn btn-ghost py-1 px-2"><Copy size={14}/></button>}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// HR TAB
+// =============================================
+function HRTab({employees,applications,newEmployee,setNewEmployee,handleAddEmployee,handleAcceptApp,handleRejectApp,editingEmployee,setEditingEmployee,setModal,isBoss,grades,theme,handleViewEmpStats,sector,serviceLogs,weekStats}){
+    const missingContracts=employees.filter(e=>!e.contractUrl).length;
+
+    return (
+        <div className="space-y-6 max-w-6xl">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div><h2 className="section-title">Ressources Humaines</h2><p className="section-sub">{employees.length} employés · {applications.length} candidature(s)</p></div>
+                {missingContracts>0&&<div className="badge badge-red"><AlertCircle size={11}/>{missingContracts} contrat(s) manquant(s)</div>}
+            </div>
+
+            {/* Applications */}
+            {isBoss && applications.length>0&&(
+                <div>
+                    <h3 className="font-bold text-white mb-3 flex items-center gap-2"><Inbox size={16} style={{color:'var(--accent)'}}/>Candidatures ({applications.length})</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {applications.map(app=>(
+                            <div key={app.id} className="card p-4 space-y-3" style={{borderColor:'rgba(99,102,241,0.2)'}}>
+                                <div className="flex justify-between">
+                                    <h4 className="font-bold text-white">{app.name}</h4>
+                                    <span className="text-xs" style={{color:'var(--text-dim)'}}>{fmtDate(app.date)}</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-1 text-xs" style={{color:'var(--text-dim)'}}>
+                                    {app.phoneRP&&<span className="flex items-center gap-1"><Phone size={10}/>{app.phoneRP}</span>}
+                                    {app.discord&&<span className="flex items-center gap-1"><MessageCircle size={10}/>{app.discord}</span>}
+                                    {app.availability&&<span className="col-span-2">Dispo: {app.availability}</span>}
+                                </div>
+                                {app.motivation&&<p className="text-xs italic p-2 rounded-lg" style={{background:'rgba(0,0,0,0.3)',color:'var(--text)'}}>{app.motivation}</p>}
+                                <div className="flex gap-2">
+                                    <button onClick={()=>handleAcceptApp(app)} className="btn btn-success flex-1 justify-center text-xs py-1.5">Recruter</button>
+                                    <button onClick={()=>handleRejectApp(app.id)} className="btn btn-danger flex-1 justify-center text-xs py-1.5">Refuser</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Add employee */}
+                {isBoss&&(
+                    <div className="card p-5 space-y-4 border-t-2" style={{borderTopColor:'var(--accent)'}}>
+                        <h3 className="font-bold text-white flex items-center gap-2"><UserPlus size={16} style={{color:'var(--accent)'}}/>Recrutement manuel</h3>
+                        <Input label="Nom complet *" value={newEmployee.name} onChange={e=>setNewEmployee({...newEmployee,name:e.target.value})} prefix={User}/>
+                        <Input label="Date de naissance" type="date" value={newEmployee.dob} onChange={e=>setNewEmployee({...newEmployee,dob:e.target.value})}/>
+                        <Select label="Grade / Poste *" options={grades.map(g=>g.name)} value={newEmployee.grade} onChange={e=>setNewEmployee({...newEmployee,grade:e.target.value})}/>
+                        <div className="grid grid-cols-2 gap-3">
+                            <Select label="Rôle" options={[{value:'user',label:'Employé'},{value:'admin',label:'Admin'}]} value={newEmployee.role} onChange={e=>setNewEmployee({...newEmployee,role:e.target.value})}/>
+                            <Input label="Mot de passe" value={newEmployee.password} onChange={e=>setNewEmployee({...newEmployee,password:e.target.value})}/>
+                        </div>
+                        <Input label="IBAN" value={newEmployee.iban} onChange={e=>setNewEmployee({...newEmployee,iban:e.target.value})} prefix={CreditCard}/>
+                        <Input label="Lien Contrat" type="url" value={newEmployee.contractUrl} onChange={e=>setNewEmployee({...newEmployee,contractUrl:e.target.value})} prefix={FileText}/>
+                        <button onClick={handleAddEmployee} className="btn btn-primary w-full justify-center">Embaucher</button>
+                    </div>
+                )}
+
+                {/* Employee list */}
+                <div className={`card overflow-hidden ${isBoss?'lg:col-span-2':'lg:col-span-3'}`}>
+                    <div className="p-4 border-b" style={{borderColor:'var(--border)'}}><h3 className="font-bold text-white">Effectifs ({employees.length})</h3></div>
+                    <div className="overflow-auto" style={{maxHeight:'600px'}}>
+                        <table className="data-table">
+                            <thead><tr><th>Identité</th><th>Grade</th><th className="text-center">Statut</th><th>Contrat</th>{isBoss&&<><th>IBAN</th><th className="text-center">Actions</th></>}</tr></thead>
+                            <tbody>
+                                {employees.map(emp=>{
+                                    const empWeekStats=weekStats.empStats.find(e=>e.id===emp.id);
+                                    return (
+                                        <tr key={emp.id}>
+                                            <td>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="relative">
+                                                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{background:'linear-gradient(135deg,var(--accent),var(--accent2))'}}>
+                                                            {emp.name.charAt(0)}
+                                                        </div>
+                                                        {emp.isServiceActive&&<div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full online-dot border" style={{borderColor:'var(--surface2)'}}/>}
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-medium text-white">{emp.name}</div>
+                                                        {emp.dob&&<div className="text-xs" style={{color:'var(--text-dim)'}}>Né(e) le {fmtDate(emp.dob)}</div>}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td><Badge color={getGradeColor(emp.grade)}>{emp.grade}</Badge></td>
+                                            <td className="text-center">
+                                                <div className={`flex items-center justify-center gap-1.5 text-xs font-semibold ${emp.isServiceActive?'text-emerald-400':'text-gray-500'}`}>
+                                                    <div className={`status-dot ${emp.isServiceActive?'online':'offline'}`}/>
+                                                    {emp.isServiceActive?'En service':'Absent'}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                {emp.contractUrl?<a href={emp.contractUrl} target="_blank" rel="noopener noreferrer" className="btn btn-ghost text-xs py-1 px-2"><FileText size={12}/>Voir</a>:<span className="text-xs text-red-400 flex items-center gap-1"><AlertCircle size={11}/>Manquant</span>}
+                                            </td>
+                                            {isBoss&&<>
+                                                <td className="mono text-xs" style={{color:'var(--text-dim)'}}>{emp.iban?emp.iban.slice(0,10)+'...':'—'}</td>
+                                                <td>
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        <button onClick={()=>handleViewEmpStats(emp)} className="btn btn-ghost py-1 px-2 text-xs"><Eye size={13}/></button>
+                                                        <button onClick={()=>setEditingEmployee({...emp})} className="btn btn-ghost py-1 px-2 text-xs"><Edit size={13}/></button>
+                                                    </div>
+                                                </td>
+                                            </>}
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// SALARIES TAB
+// =============================================
+function SalairesTab({weekStats,grades,selectedDate,setSelectedDate,generatePaySlipPDF,theme,genExcelCSV,invoices,serviceLogs}){
+    return (
+        <div className="space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div><h2 className="section-title">Salaires & Primes</h2><p className="section-sub">Calcul automatique · Fiches téléchargeables</p></div>
+                <WeekNav date={selectedDate} onPrev={()=>{const d=new Date(selectedDate);d.setDate(d.getDate()-7);setSelectedDate(d);}} onNext={()=>{const d=new Date(selectedDate);d.setDate(d.getDate()+7);setSelectedDate(d);}}/>
+            </div>
+            <div className="card overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="data-table" style={{minWidth:'900px'}}>
+                        <thead><tr>
+                            <th>Employé</th><th className="text-center">Heures</th><th style={{minWidth:200}}>Rentabilité</th>
+                            <th className="text-right">Salaire</th><th className="text-right">Prime</th><th className="text-right">Total</th><th className="text-center">Fiche</th>
+                        </tr></thead>
+                        <tbody>
+                            {weekStats.empStats.map(emp=>{
+                                const grd=grades.find(g=>g.name===emp.grade);
+                                const maxSalary=grd?.maxSalary||0;
+                                const targetProfit=maxSalary*1.5;
+                                const progress=targetProfit>0?Math.min(emp.profit/targetProfit*100,100):100;
+                                const isComplete=progress>=100;
+                                const earnedSalary=maxSalary*(progress/100);
+                                const finalBonus=isComplete?emp.bonus:0;
+                                const total=earnedSalary+finalBonus;
+                                return (
+                                    <tr key={emp.id}>
+                                        <td>
+                                            <div className="font-semibold text-white">{emp.name}</div>
+                                            <div className="text-xs" style={{color:'var(--text-dim)'}}>{emp.grade}</div>
+                                        </td>
+                                        <td className="text-center">
+                                            <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg text-sm mono" style={{background:'rgba(0,0,0,0.3)'}}>
+                                                <Clock size={12} style={{color:'var(--accent)'}}/>{fmtDuration(emp.hours)}
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div className="space-y-1.5">
+                                                <div className="flex justify-between text-xs">
+                                                    <span className={isComplete?'text-emerald-400':'text-white'}>€ {fmtMoney(emp.profit)} <span style={{color:'var(--text-dim)'}}>/ € {fmtMoney(targetProfit)}</span></span>
+                                                    <span style={{color:'var(--text-dim)'}}>{Math.round(progress)}%</span>
+                                                </div>
+                                                {targetProfit>0&&<div className="progress-track"><div className="progress-fill" style={{width:`${progress}%`,background:isComplete?'linear-gradient(90deg,#10b981,#34d399)':'linear-gradient(90deg,var(--accent),var(--accent2))'}}></div></div>}
+                                            </div>
+                                        </td>
+                                        <td className="text-right mono text-white">€ {fmtMoney(earnedSalary)}<div className="text-xs" style={{color:'var(--text-dim)'}}>max € {fmtMoney(maxSalary)}</div></td>
+                                        <td className="text-right">
+                                            {isComplete?<span className="mono text-emerald-400 font-bold flex items-center justify-end gap-1"><Unlock size={12}/>€ {fmtMoney(emp.bonus)}</span>:<span className="mono text-amber-500/60 flex items-center justify-end gap-1"><Lock size={12}/>€ {fmtMoney(emp.bonus)}</span>}
+                                        </td>
+                                        <td className="text-right">
+                                            <span className={`inline-block px-3 py-1 rounded-lg mono font-bold text-sm ${isComplete?'text-emerald-100':'text-white'}`} style={{background:isComplete?'rgba(16,185,129,0.15)':'rgba(255,255,255,0.05)',border:`1px solid ${isComplete?'rgba(16,185,129,0.3)':'rgba(255,255,255,0.08)'}`}}>
+                                                € {fmtMoney(total)}
+                                            </span>
+                                        </td>
+                                        <td className="text-center">
+                                            <button onClick={()=>generatePaySlipPDF(emp,{baseSalary:earnedSalary,bonus:finalBonus,total},selectedDate,theme)} className="btn btn-ghost py-1 px-2 text-xs"><Download size={14}/></button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div className="flex gap-3">
+                <button onClick={()=>genExcelCSV(weekStats.wInv,'export_salaires.csv')} className="btn btn-ghost"><FileSpreadsheet size={15}/>Export CSV factures</button>
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// SETTINGS TAB
+// =============================================
+function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handleSaveGrades,confirmResetId,setConfirmResetId,handleResetStats,customMessages,setCustomMessages,handleSaveMessages,isEditingMessages,setIsEditingMessages}){
+    const sector=BUSINESS_SECTORS.find(s=>s.id===theme.sector)||BUSINESS_SECTORS[BUSINESS_SECTORS.length-1];
+    return (
+        <div className="space-y-6 max-w-3xl">
+            <div><h2 className="section-title">Configuration</h2><p className="section-sub">Personnalisation & paramètres globaux</p></div>
+
+            {/* IDENTITY */}
+            <div className="card p-5 space-y-5">
+                <h3 className="font-bold text-white flex items-center gap-2"><Palette size={16} style={{color:'var(--accent)'}}/>Identité de l'entreprise</h3>
+                <Input label="Nom de l'application" value={theme.appName} onChange={e=>handleSaveTheme({...theme,appName:e.target.value})}/>
+                <div>
+                    <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{color:'var(--text-dim)'}}>Secteur d'activité</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {BUSINESS_SECTORS.map(s=>(
+                            <button key={s.id} onClick={()=>handleSaveTheme({...theme,sector:s.id})} className={`p-3 rounded-xl border text-left transition-all text-sm ${theme.sector===s.id?'border-indigo-500 bg-indigo-500/10 text-white':'border-white/08 text-gray-400 hover:border-white/20'}`} style={{borderColor:theme.sector===s.id?'var(--accent)':undefined}}>
+                                <div className="text-xl mb-1">{s.icon}</div>
+                                <div className="font-medium text-xs">{s.label}</div>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <div>
+                    <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{color:'var(--text-dim)'}}>Couleur principale</p>
+                    <div className="flex flex-wrap gap-2">
+                        {THEME_COLORS.map(c=>(
+                            <button key={c.name} onClick={()=>handleSaveTheme({...theme,primaryColor:c.name,accentHex:c.hex})} className={`color-dot ${theme.primaryColor===c.name?'selected':''}`} style={{background:c.hex}} title={c.name}/>
+                        ))}
+                    </div>
+                </div>
+                <div>
+                    <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{color:'var(--text-dim)'}}>Couleur secondaire</p>
+                    <div className="flex flex-wrap gap-2">
+                        {THEME_COLORS.map(c=>(
+                            <button key={c.name} onClick={()=>handleSaveTheme({...theme,secondaryColor:c.name})} className={`color-dot ${theme.secondaryColor===c.name?'selected':''}`} style={{background:c.hex}} title={c.name}/>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* SERVICES */}
+            <div className="card p-5 space-y-4">
+                <h3 className="font-bold text-white flex items-center gap-2"><Package size={16} className="text-emerald-400"/>Types de prestations</h3>
+                {(config.services||[]).map((svc,i)=>(
+                    <div key={svc.id} className="flex items-center gap-3 p-3 rounded-xl" style={{background:'rgba(0,0,0,0.2)',border:'1px solid var(--border)'}}>
+                        <input className="input-base flex-1 py-2 text-sm" value={svc.name} onChange={e=>{const n=[...config.services];n[i].name=e.target.value;handleSaveConfig({...config,services:n});}}/>
+                        <div className="relative w-28">
+                            <input type="number" className="input-base py-2 text-sm pr-6 mono" value={svc.costPercent} onChange={e=>{const n=[...config.services];n[i].costPercent=parseFloat(e.target.value)||0;handleSaveConfig({...config,services:n});}} placeholder="Coût%"/>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{color:'var(--text-dim)'}}>%</span>
+                        </div>
+                        <div className="relative w-28">
+                            <input type="number" className="input-base py-2 text-sm pr-6 mono" value={svc.bonusPercent??''} onChange={e=>{const n=[...config.services];n[i].bonusPercent=e.target.value===''?null:parseFloat(e.target.value);handleSaveConfig({...config,services:n});}} placeholder="Prime%"/>
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{color:'var(--text-dim)'}}>%</span>
+                        </div>
+                        <button onClick={()=>handleSaveConfig({...config,services:config.services.filter((_,j)=>j!==i)})} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={15}/></button>
+                    </div>
+                ))}
+                <button onClick={()=>handleSaveConfig({...config,services:[...(config.services||[]),{id:`srv_${Date.now()}`,name:'Nouveau service',costPercent:0,bonusPercent:null}]})} className="w-full py-2.5 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:text-white" style={{borderColor:'rgba(255,255,255,0.1)',color:'var(--text-dim)'}}>
+                    <Plus size={15}/>Ajouter une prestation
+                </button>
+            </div>
+
+            {/* GRADES */}
+            <div className="card overflow-hidden">
+                <div className="p-5 border-b" style={{borderColor:'var(--border)'}}><h3 className="font-bold text-white flex items-center gap-2"><Layers size={16} className="text-blue-400"/>Grilles de salaires</h3></div>
+                <div className="overflow-x-auto">
+                    <table className="data-table">
+                        <thead><tr><th>Grade</th><th className="text-center">Prime %</th><th className="text-center">Salaire max</th><th className="text-center">Suppr.</th></tr></thead>
+                        <tbody>
+                            {grades.map(g=>(
+                                <tr key={g.id}>
+                                    <td><input className="input-base py-1.5 text-sm" value={g.name} onChange={e=>handleSaveGrades(grades.map(x=>x.id===g.id?{...x,name:e.target.value}:x))}/></td>
+                                    <td className="text-center"><input type="number" className="input-base py-1.5 text-sm w-16 text-center mono" value={g.primePercent} onChange={e=>handleSaveGrades(grades.map(x=>x.id===g.id?{...x,primePercent:parseFloat(e.target.value)||0}:x))}/></td>
+                                    <td className="text-center"><input type="number" className="input-base py-1.5 text-sm w-24 text-center mono" value={g.maxSalary} onChange={e=>handleSaveGrades(grades.map(x=>x.id===g.id?{...x,maxSalary:parseFloat(e.target.value)||0}:x))}/></td>
+                                    <td className="text-center"><button onClick={()=>{if(window.confirm('Supprimer?'))handleSaveGrades(grades.filter(x=>x.id!==g.id));}} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={14}/></button></td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+                <div className="p-3 border-t" style={{borderColor:'var(--border)'}}>
+                    <button onClick={()=>handleSaveGrades([...grades,{id:`g_${Date.now()}`,name:'Nouveau grade',primePercent:0,maxSalary:0,order:grades.length}])} className="w-full py-2 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:text-white" style={{borderColor:'rgba(255,255,255,0.1)',color:'var(--text-dim)'}}><Plus size={14}/>Ajouter grade</button>
+                </div>
+            </div>
+
+            {/* DANGER ZONE */}
+            <div className="card p-5 border-t-2" style={{borderTopColor:'#ef4444'}}>
+                <h3 className="font-bold text-red-400 mb-3 flex items-center gap-2"><AlertCircle size={16}/>Zone de danger</h3>
+                <p className="text-sm mb-4" style={{color:'var(--text-dim)'}}>Effacer définitivement tout l'historique des factures. Action irréversible.</p>
+                {confirmResetId!=='reset'?(
+                    <button onClick={()=>setConfirmResetId('reset')} className="btn btn-danger"><Trash2 size={15}/>Réinitialiser les statistiques</button>
+                ):(
+                    <div className="flex gap-3">
+                        <button onClick={()=>setConfirmResetId(null)} className="btn btn-ghost">Annuler</button>
+                        <button onClick={handleResetStats} className="btn btn-danger">Confirmer la suppression</button>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// =============================================
+// EMPLOYEE MODAL
+// =============================================
+function EmployeeModal({emp,setEmp,grades,handleSave,handleFire,currentUser,isBoss,theme}){
+    const [confirmFire,setConfirmFire]=useState(false);
+    return (
+        <div className="modal-bg" onClick={()=>setEmp(null)}>
+            <div className="modal" onClick={e=>e.stopPropagation()}>
+                <div className="p-5 border-b flex items-center justify-between" style={{borderColor:'var(--border)'}}>
+                    <h3 className="font-bold text-white flex items-center gap-2"><Edit size={17} style={{color:'var(--accent)'}}/>Modifier employé</h3>
+                    <button onClick={()=>setEmp(null)} style={{color:'var(--text-dim)'}}><X size={20}/></button>
+                </div>
+                <div className="p-5 space-y-4">
+                    <Input label="Nom complet" value={emp.name} onChange={e=>setEmp({...emp,name:e.target.value})} readOnly={!isBoss}/>
+                    <Input label="Date de naissance" type="date" value={emp.dob} onChange={e=>setEmp({...emp,dob:e.target.value})} readOnly={!isBoss}/>
+                    <Select label="Grade" options={grades.map(g=>g.name)} value={emp.grade} onChange={e=>setEmp({...emp,grade:e.target.value})} readOnly={!isBoss}/>
+                    {isBoss&&<Select label="Rôle" options={[{value:'user',label:'Employé'},{value:'admin',label:'Admin'}]} value={emp.role} onChange={e=>setEmp({...emp,role:e.target.value})}/>}
+                    <Input label="Lien contrat" type="url" value={emp.contractUrl} onChange={e=>setEmp({...emp,contractUrl:e.target.value})} prefix={FileText}/>
+                    <Input label="IBAN" value={emp.iban} onChange={e=>setEmp({...emp,iban:e.target.value})} prefix={CreditCard}/>
+                    {isBoss&&<Input label="Mot de passe" value={emp.password} onChange={e=>setEmp({...emp,password:e.target.value})} prefix={Lock}/>}
+                    <div className="flex gap-3 pt-2">
+                        <button onClick={()=>setEmp(null)} className="btn btn-ghost flex-1 justify-center">Annuler</button>
+                        <button onClick={handleSave} className="btn btn-primary flex-1 justify-center"><Save size={15}/>Enregistrer</button>
+                    </div>
+                    {isBoss && emp.id!==currentUser?.id && (
+                        <div className="pt-4 border-t" style={{borderColor:'rgba(239,68,68,0.2)'}}>
+                            {!confirmFire?(
+                                <button onClick={()=>setConfirmFire(true)} className="btn btn-danger w-full justify-center"><UserMinus size={15}/>Licencier</button>
+                            ):(
+                                <div className="flex gap-3">
+                                    <button onClick={()=>setConfirmFire(false)} className="btn btn-ghost flex-1 justify-center">Annuler</button>
+                                    <button onClick={()=>handleFire(emp.id)} className="btn btn-danger flex-1 justify-center">Confirmer</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// BOOT
+createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
