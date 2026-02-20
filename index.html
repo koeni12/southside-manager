@@ -51,7 +51,7 @@
         window._db = firebase.firestore();
         window._auth = firebase.auth();
         
-        // Handle Auth for permissions (Wait for Auth to be ready)
+        // Handle Auth for permissions (Anti-blocage amélioré)
         window._authReady = new Promise(resolve => {
             const unsubscribe = window._auth.onAuthStateChanged((user) => {
                 if(user) {
@@ -59,11 +59,28 @@
                     unsubscribe();
                 }
             });
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                window._auth.signInWithCustomToken(__initial_auth_token).catch(console.error);
-            } else {
-                window._auth.signInAnonymously().catch(console.error);
-            }
+            
+            const attemptAuth = async () => {
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await window._auth.signInWithCustomToken(__initial_auth_token);
+                    } else {
+                        await window._auth.signInAnonymously();
+                    }
+                } catch(e) {
+                    console.warn("Auth Firebase ignorée (mode hors-ligne forcé)");
+                    resolve(null);
+                    unsubscribe();
+                }
+            };
+            
+            attemptAuth();
+            
+            // Sécurité anti-écran de chargement infini (5 secondes max)
+            setTimeout(() => {
+                resolve(null);
+                unsubscribe();
+            }, 5000);
         });
 
         console.log('🔥 Firebase connecté à la base de données d\'origine');
@@ -281,9 +298,8 @@
 <body class="mesh-bg">
 <div id="root"></div>
 <script type="text/babel" data-type="module">
-// L'IMPORT MAP EST MAINTENANT LE PREMIER SCRIPT DU HEAD, NOUS UTILISONS DES IMPORTS STANDARDS
-import React, { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
-import { createRoot } from 'react-dom/client';
+import React, { useState, useEffect, useMemo, useRef, useCallback, memo } from 'https://esm.sh/react@18.2.0';
+import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
 import {
     LayoutDashboard, FileText, History, Users, BarChart3, Settings, LogOut, Plus, Trash2, Save,
     TrendingUp, Wallet, Award, Search, CheckCircle, AlertCircle, Menu, X, ChevronRight, ChevronLeft,
@@ -294,9 +310,9 @@ import {
     PieChart, Zap, Star, Globe, Coffee, Shield, Layers, RefreshCw, ArrowUp, ArrowDown,
     ChevronDown, Hash, Inbox, Archive, CheckSquare, Circle, Kanban, BookOpen, FileSpreadsheet,
     Lightbulb, Map, Grid, List, MoreVertical, Share, Printer, Mail, Home, Cpu, AlignLeft
-} from 'lucide-react';
-import { AreaChart, Area, BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell, Legend } from 'recharts';
-import { jsPDF } from 'jspdf';
+} from 'https://esm.sh/lucide-react@0.263.1';
+import { AreaChart, Area, BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell, Legend } from 'https://esm.sh/recharts@2.12.0';
+import { jsPDF } from 'https://esm.sh/jspdf@2.5.1';
 
 // =============================================
 // FIRESTORE HELPERS (Connecté à la DB d'origine)
@@ -789,7 +805,7 @@ function App() {
             ]);
 
             // First launch? Seed Firestore with initial data
-            if(!themeD && !empsD) {
+            if(!themeD && (!empsD || empsD.length === 0)) {
                 console.log('🔥 Premier lancement — seed Firestore...');
                 await Promise.all([
                     FS.docSet('settings/theme', INIT_THEME),
@@ -806,7 +822,7 @@ function App() {
             setTheme(themeD || INIT_THEME);
             setConfig(configD || INIT_CONFIG);
             setGrades(gradesD || INIT_GRADES);
-            setEmployees(empsD || INIT_EMPLOYEES);
+            setEmployees(empsD && empsD.length > 0 ? empsD : INIT_EMPLOYEES);
             setInvoices(invsD || INIT_INVOICES);
             setContracts(ctrsD || INIT_CONTRACTS);
             setApplications(appsD || INIT_APPLICATIONS);
@@ -816,7 +832,7 @@ function App() {
 
             // Cache in localStorage as offline fallback
             ls.set('bm_theme', themeD || INIT_THEME);
-            ls.set('bm_employees', empsD || INIT_EMPLOYEES);
+            ls.set('bm_employees', empsD && empsD.length > 0 ? empsD : INIT_EMPLOYEES);
             ls.set('bm_invoices', invsD || INIT_INVOICES);
         } catch(e) {
             console.warn('Firestore load failed, fallback localStorage:', e);
@@ -842,7 +858,7 @@ function App() {
         let unsubs = [];
         window._authReady.then(() => {
             unsubs = [
-                FS.listen('employees', d => { setEmployees(d); ls.set('bm_employees',d); }),
+                FS.listen('employees', d => { if(d.length>0){ setEmployees(d); ls.set('bm_employees',d); } }),
                 FS.listen('invoices', d => { setInvoices(d); ls.set('bm_invoices',d); }),
                 FS.listen('contracts', d => { setContracts(d); ls.set('bm_contracts',d); }),
                 FS.listen('applications', d => { setApplications(d); ls.set('bm_applications',d); }),
@@ -966,12 +982,10 @@ function App() {
     const handleLogin = useCallback(async e=>{
         e.preventDefault();
         
-        if (employees.length === 0) {
-            setLoginError('Chargement des données... Veuillez patienter.');
-            return;
-        }
-
-        const u = employees.find(emp => emp.name.toLowerCase()===loginForm.username.toLowerCase() && emp.password===loginForm.password);
+        // Anti-blocage : on utilise INIT_EMPLOYEES si employees n'a pas encore chargé depuis firebase
+        const allAccounts = employees.length > 0 ? employees : INIT_EMPLOYEES;
+        const u = allAccounts.find(emp => emp.name.toLowerCase()===loginForm.username.toLowerCase() && emp.password===loginForm.password);
+        
         if(u){
             if(stayConnected) ls.set('bm_session',u.id); else ls.set('bm_session',null);
             setCurrentUser(u); setDashTarget(u);
@@ -1204,7 +1218,7 @@ function App() {
         </div>
     );
 
-    if(!currentUser) return <LoginScreen {...{theme,employees,loginForm,setLoginForm,loginError,handleLogin,stayConnected,setStayConnected,authMode,setAuthMode,appForm,setAppForm,handleSubmitApp,toast,showToast,sector}}/>;
+    if(!currentUser) return <LoginScreen {...{theme,employees,loginForm,setLoginForm,loginError,handleLogin,stayConnected,setStayConnected,authMode,setAuthMode,appForm,setAppForm,handleSubmitApp,toast,sector}}/>;
 
     const navItems = [
         {id:'dashboard',icon:LayoutDashboard,label:'Dashboard',admin:true},
