@@ -444,7 +444,6 @@ const INIT_GRADES = [
     {id:'g5',name:'Stagiaire',primePercent:5,maxSalary:800,order:4},
 ];
 const INIT_EMPLOYEES = [
-    {id:'e0',name:'Admin',grade:'Directeur',role:'admin',password:'admin',dob:'',contractUrl:'',iban:'',isServiceActive:false},
     {id:'e1',name:'Alex Martin',grade:'Directeur',role:'admin',password:'1234',dob:'1990-05-20',contractUrl:'',iban:'FR76 1234 5678 9012 3456 7890 123',isServiceActive:false},
     {id:'e2',name:'Sophie Durand',grade:'Manager',role:'admin',password:'1234',dob:'1992-08-14',contractUrl:'',iban:'',isServiceActive:false},
     {id:'e3',name:'Lucas Bernard',grade:'Senior',role:'user',password:'1234',dob:'1995-11-03',contractUrl:'',iban:'',isServiceActive:false},
@@ -610,7 +609,7 @@ const genExcelCSV = (invoices, filename='export.csv') => {
 // =============================================
 // LOGIN SCREEN
 // =============================================
-function LoginScreen({theme,employees,loginForm,setLoginForm,loginError,handleLogin,stayConnected,setStayConnected,authMode,setAuthMode,appForm,setAppForm,handleSubmitApp,toast,showToast,sector}){
+function LoginScreen({theme,employees,loginForm,setLoginForm,loginError,handleLogin,stayConnected,setStayConnected,authMode,setAuthMode,appForm,setAppForm,handleSubmitApp,toast,sector}){
     return (
         <div className="min-h-screen flex items-center justify-center p-4 relative">
             <div className="w-full max-w-md anim-up">
@@ -673,7 +672,7 @@ function LoginScreen({theme,employees,loginForm,setLoginForm,loginError,handleLo
 }
 
 // =============================================
-// MAIN APP
+// MAIN APP COMPONENT
 // =============================================
 function App() {
     // ---- AUTH ----
@@ -752,8 +751,6 @@ function App() {
         const c2=THEME_COLORS.find(c=>c.name===theme.secondaryColor);
         if(c2) document.documentElement.style.setProperty('--accent2',c2.hex);
     },[theme.primaryColor,theme.secondaryColor]);
-
-
 
     const loadLocal = useCallback(async()=>{
         try {
@@ -848,7 +845,6 @@ function App() {
             if(u){ 
                 setCurrentUser(u); setDashTarget(u); 
                 setActiveTab(checkIsAdmin(u.role, u.grade) ? 'dashboard' : 'personal'); 
-                showToast(`Bon retour, ${u.name.split(' ')[0]} !`); 
             }
         }
     },[employees]);
@@ -866,7 +862,6 @@ function App() {
         const t=setInterval(()=>ls.set('bm_svc_hb',Date.now()),5000);
         return ()=>clearInterval(t);
     },[isServiceActive]);
-
 
     // ====== TOAST ======
     const toastRef=useRef(null);
@@ -948,17 +943,15 @@ function App() {
     },[config]);
 
     // ====== ACTIONS ======
-    // Compte admin de secours — fonctionne même sans Firebase
-    const FALLBACK_ADMIN = {id:'e0',name:'Admin',grade:'Directeur',role:'admin',password:'admin',dob:'',contractUrl:'',iban:'',isServiceActive:false};
-
     const handleLogin = useCallback(async e=>{
         e.preventDefault();
-        // Toujours inclure le compte admin de secours + INIT_EMPLOYEES même si Firebase est vide
-        const allAccounts = [FALLBACK_ADMIN, ...INIT_EMPLOYEES, ...employees];
-        // Dédupliquer par id
-        const seen = new Set();
-        const deduped = allAccounts.filter(a=>{ if(seen.has(a.id)) return false; seen.add(a.id); return true; });
-        const u = deduped.find(emp => emp.name.toLowerCase()===loginForm.username.toLowerCase() && emp.password===loginForm.password);
+        
+        if (employees.length === 0) {
+            setLoginError('Chargement des données... Veuillez patienter.');
+            return;
+        }
+
+        const u = employees.find(emp => emp.name.toLowerCase()===loginForm.username.toLowerCase() && emp.password===loginForm.password);
         if(u){
             if(stayConnected) ls.set('bm_session',u.id); else ls.set('bm_session',null);
             setCurrentUser(u); setDashTarget(u);
@@ -966,7 +959,7 @@ function App() {
             setLoginError('');
             showToast(`Bienvenue, ${u.name.split(' ')[0]} !`);
         } else {
-            setLoginError('Identifiants incorrects. Compte admin par défaut : Admin / admin');
+            setLoginError('Identifiants incorrects.');
         }
     },[employees,loginForm,stayConnected,showToast]);
 
@@ -992,7 +985,7 @@ function App() {
             ls.set('bm_svc_active','true'); ls.set('bm_svc_start',start);
             showToast('Prise de service ✅');
         }
-    },[isServiceActive,serviceStartTime,currentUser,employees,showToast]);
+    },[isServiceActive,serviceStartTime,currentUser,showToast]);
 
     const handleCreateInvoice = useCallback(async()=>{
         if(!newInvoice.client||!newInvoice.type||!newInvoice.price){ showToast('Champs obligatoires manquants','error'); return; }
@@ -2172,6 +2165,9 @@ function AideTab({customMessages,setCustomMessages,isEditingMessages,setIsEditin
 function HRTab({employees,applications,newEmployee,setNewEmployee,handleAddEmployee,handleAcceptApp,handleRejectApp,editingEmployee,setEditingEmployee,setModal,isBoss,grades,theme,handleViewEmpStats,sector,serviceLogs,weekStats}){
     const missingContracts=employees.filter(e=>!e.contractUrl).length;
 
+    // Trier les candidatures (les plus anciennes en premier)
+    const sortedApps = [...applications].sort((a,b) => new Date(a.date) - new Date(b.date));
+
     return (
         <div className="space-y-6 max-w-6xl">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -2181,22 +2177,29 @@ function HRTab({employees,applications,newEmployee,setNewEmployee,handleAddEmplo
 
             {/* Applications */}
             {isBoss && applications.length>0&&(
-                <div>
+                <div className="mb-6">
                     <h3 className="font-bold text-white mb-3 flex items-center gap-2"><Inbox size={16} style={{color:'var(--accent)'}}/>Candidatures ({applications.length})</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {applications.map(app=>(
-                            <div key={app.id} className="card p-4 space-y-3" style={{borderColor:'rgba(99,102,241,0.2)'}}>
-                                <div className="flex justify-between">
+                    {/* Défilement horizontal des candidatures */}
+                    <div className="flex gap-4 overflow-x-auto custom-scrollbar pb-4" style={{scrollSnapType: 'x mandatory'}}>
+                        {sortedApps.map(app=>(
+                            <div key={app.id} className="card p-4 flex flex-col flex-shrink-0 snap-start" style={{borderColor:'rgba(99,102,241,0.2)', width: '320px'}}>
+                                <div className="flex justify-between mb-3">
                                     <h4 className="font-bold text-white">{app.name}</h4>
                                     <span className="text-xs" style={{color:'var(--text-dim)'}}>{fmtDate(app.date)}</span>
                                 </div>
-                                <div className="grid grid-cols-2 gap-1 text-xs" style={{color:'var(--text-dim)'}}>
+                                
+                                {/* Détails (Âge, Dispo, etc.) */}
+                                <div className="grid grid-cols-2 gap-2 text-xs mb-3" style={{color:'var(--text-dim)'}}>
+                                    {app.dob&&<span className="col-span-1">Né(e): {fmtDate(app.dob)}</span>}
+                                    {app.ageHRP&&<span className="col-span-1">Âge réel: {app.ageHRP} ans</span>}
                                     {app.phoneRP&&<span className="flex items-center gap-1"><Phone size={10}/>{app.phoneRP}</span>}
                                     {app.discord&&<span className="flex items-center gap-1"><MessageCircle size={10}/>{app.discord}</span>}
                                     {app.availability&&<span className="col-span-2">Dispo: {app.availability}</span>}
                                 </div>
-                                {app.motivation&&<p className="text-xs italic p-2 rounded-lg" style={{background:'rgba(0,0,0,0.3)',color:'var(--text)'}}>{app.motivation}</p>}
-                                <div className="flex gap-2">
+                                
+                                {app.motivation&&<p className="text-xs italic p-3 rounded-lg mb-4 flex-1" style={{background:'rgba(0,0,0,0.3)',color:'var(--text)'}}>{app.motivation}</p>}
+                                
+                                <div className="flex gap-2 mt-auto">
                                     <button onClick={()=>handleAcceptApp(app)} className="btn btn-success flex-1 justify-center text-xs py-1.5">Recruter</button>
                                     <button onClick={()=>handleRejectApp(app.id)} className="btn btn-danger flex-1 justify-center text-xs py-1.5">Refuser</button>
                                 </div>
