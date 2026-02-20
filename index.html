@@ -2473,7 +2473,7 @@ function EmployeeModal({emp,setEmp,grades,handleSave,handleFire,currentUser,isBo
                     <Input label="Nom complet" value={emp.name} onChange={e=>setEmp({...emp,name:e.target.value})} readOnly={!isBoss}/>
                     <Input label="Date de naissance" type="date" value={emp.dob} onChange={e=>setEmp({...emp,dob:e.target.value})} readOnly={!isBoss}/>
                     <Select label="Grade" options={grades.map(g=>g.name)} value={emp.grade} onChange={e=>setEmp({...emp,grade:e.target.value})} readOnly={!isBoss}/>
-                    {isBoss&&<Select label="Rôle" options={[{value:'user',label:'Employé'},{value:'admin',label:'Admin'}]} value={emp.role} onChange={e=>setEmp({...emp,role:e.target.value})}/>}
+                    {isBoss&&<Select label="Rôle" options={[{value:'user',label:'Employé'},{value:'',label:''}]} value={emp.role} onChange={e=>setEmp({...emp,role:e.target.value})}/>}
                     <Input label="Lien contrat" type="url" value={emp.contractUrl} onChange={e=>setEmp({...emp,contractUrl:e.target.value})} prefix={FileText}/>
                     <Input label="IBAN" value={emp.iban} onChange={e=>setEmp({...emp,iban:e.target.value})} prefix={CreditCard}/>
                     {isBoss&&<Input label="Mot de passe" value={emp.password} onChange={e=>setEmp({...emp,password:e.target.value})} prefix={Lock}/>}
