@@ -1,12 +1,8 @@
 <!DOCTYPE html>
 <!-- 
-  ✅ FIREBASE CLOUD VERSION
+  ✅ FIREBASE CLOUD VERSION (Connectée à la DB d'origine)
   Données synchronisées en temps réel via Firebase Firestore.
   localStorage conservé comme cache offline.
-  1. Renommez ce fichier en  index.html
-  2. Placez-le à la racine de votre repo
-  3. Dans Vercel → New Project → importez le repo
-  4. Framework: Other / Static HTML → Deploy
 -->
 
 <html lang="fr">
@@ -17,12 +13,15 @@
     <script>const _cw=console.warn.bind(console);console.warn=(...a)=>{if(typeof a[0]==="string"&&a[0].includes("cdn.tailwindcss.com"))return;_cw(...a)};</script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    
     <!-- Firebase CDN (compat mode for global access) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+    
     <script>
-        // Initialize Firebase globally before React loads
-        window._firebaseApp = firebase.initializeApp({
+        // Initialize Firebase globally before React loads with environment variables
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyB-EcSw-43CbNDYg_q5BLU9jL7HjGhZf78",
             authDomain: "southside-custom.firebaseapp.com",
             projectId: "southside-custom",
@@ -30,10 +29,28 @@
             messagingSenderId: "89724035455",
             appId: "1:89724035455:web:b50bb76124829175ccba4a",
             measurementId: "G-R9CXF4WBP0"
-        });
+        };
+        
+        window._appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        window._firebaseApp = firebase.initializeApp(firebaseConfig);
         window._db = firebase.firestore();
-        console.log('🔥 Firebase Firestore initialisé');
+        window._auth = firebase.auth();
+        
+        // Handle Auth for permissions (Wait for Auth to be ready)
+        window._authReady = new Promise(resolve => {
+            window._auth.onAuthStateChanged((user) => {
+                if(user) resolve(user);
+            });
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                window._auth.signInWithCustomToken(__initial_auth_token).catch(console.error);
+            } else {
+                window._auth.signInAnonymously().catch(console.error);
+            }
+        });
+
+        console.log('🔥 Firebase connecté à la base de données d\'origine');
     </script>
+    
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         :root {
@@ -276,48 +293,62 @@ import { AreaChart, Area, BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGr
 import { jsPDF } from 'jspdf';
 
 // =============================================
-// FIRESTORE HELPERS (use window._db from CDN init)
+// FIRESTORE HELPERS (Connecté à la DB d'origine)
 // =============================================
 const db = window._db;
+
+// Cette fonction redirige toutes les données vers les chemins sécurisés d'origine 
+// (ceux utilisés par la toute première version de l'application)
+const getPath = (p) => `artifacts/${window._appId}/public/data/${p}`;
+
 const FS = {
     // Read a single document
     async docGet(path, fallback) {
         try {
-            const snap = await db.doc(path).get();
+            await window._authReady;
+            const snap = await db.doc(getPath(path)).get();
             return snap.exists ? snap.data() : fallback;
         } catch(e) { console.warn('FS docGet error:', path, e); return fallback; }
     },
     // Write a single document (merge)
     async docSet(path, data) {
-        try { await db.doc(path).set(data, { merge: true }); }
-        catch(e) { console.warn('FS docSet error:', path, e); }
+        try { 
+            await window._authReady; 
+            await db.doc(getPath(path)).set(data, { merge: true }); 
+        } catch(e) { console.warn('FS docSet error:', path, e); }
     },
     // Read all docs in a collection
     async collGet(path, fallback) {
         try {
-            const snap = await db.collection(path).get();
+            await window._authReady;
+            const snap = await db.collection(getPath(path)).get();
             if(snap.empty) return fallback;
             return snap.docs.map(d => ({ ...d.data(), id: d.id }));
         } catch(e) { console.warn('FS collGet error:', path, e); return fallback; }
     },
     // Upsert a single doc in a collection
     async upsert(colPath, item) {
-        try { await db.collection(colPath).doc(item.id).set({ ...item }, { merge: true }); }
-        catch(e) { console.warn('FS upsert error:', colPath, e); }
+        try { 
+            await window._authReady; 
+            await db.collection(getPath(colPath)).doc(item.id).set({ ...item }, { merge: true }); 
+        } catch(e) { console.warn('FS upsert error:', colPath, e); }
     },
     // Delete a single doc
     async del(colPath, id) {
-        try { await db.collection(colPath).doc(id).delete(); }
-        catch(e) { console.warn('FS del error:', colPath, e); }
+        try { 
+            await window._authReady; 
+            await db.collection(getPath(colPath)).doc(id).delete(); 
+        } catch(e) { console.warn('FS del error:', colPath, e); }
     },
     // Overwrite entire collection (for grades etc.)
     async collSet(colPath, items) {
         try {
+            await window._authReady;
             const batch = db.batch();
-            const snap = await db.collection(colPath).get();
+            const snap = await db.collection(getPath(colPath)).get();
             snap.docs.forEach(d => batch.delete(d.ref));
             items.forEach(item => {
-                const ref = db.collection(colPath).doc(item.id || `doc_${Date.now()}_${Math.random().toString(36).slice(2,8)}`);
+                const ref = db.collection(getPath(colPath)).doc(item.id || `doc_${Date.now()}_${Math.random().toString(36).slice(2,8)}`);
                 batch.set(ref, { ...item });
             });
             await batch.commit();
@@ -325,21 +356,30 @@ const FS = {
     },
     // Real-time listener on a collection
     listen(colPath, cb) {
-        return db.collection(colPath).onSnapshot(snap => {
-            cb(snap.docs.map(d => ({ ...d.data(), id: d.id })));
-        }, err => console.warn('FS listen error:', colPath, err));
+        let unsub = () => {};
+        window._authReady.then(() => {
+            unsub = db.collection(getPath(colPath)).onSnapshot(snap => {
+                cb(snap.docs.map(d => ({ ...d.data(), id: d.id })));
+            }, err => console.warn('FS listen error:', colPath, err));
+        });
+        return () => unsub();
     },
     // Real-time listener on a document
     docListen(path, cb, fallback) {
-        return db.doc(path).onSnapshot(snap => {
-            cb(snap.exists ? snap.data() : fallback);
-        }, err => console.warn('FS docListen error:', path, err));
+        let unsub = () => {};
+        window._authReady.then(() => {
+            unsub = db.doc(getPath(path)).onSnapshot(snap => {
+                cb(snap.exists ? snap.data() : fallback);
+            }, err => console.warn('FS docListen error:', path, err));
+        });
+        return () => unsub();
     },
     // Clear a collection
     async collClear(colPath) {
         try {
+            await window._authReady;
             const batch = db.batch();
-            const snap = await db.collection(colPath).get();
+            const snap = await db.collection(getPath(colPath)).get();
             snap.docs.forEach(d => batch.delete(d.ref));
             await batch.commit();
         } catch(e) { console.warn('FS collClear error:', colPath, e); }
@@ -660,6 +700,7 @@ function App() {
 
     const loadLocal = useCallback(async()=>{
         try {
+            await window._authReady;
             const [themeD,configD,gradesD,empsD,invsD,ctrsD,appsD,tasksD,msgsD,logsD] = await Promise.all([
                 FS.docGet('settings/theme', null),
                 FS.docGet('settings/config', null),
@@ -724,18 +765,21 @@ function App() {
 
     // ====== REAL-TIME LISTENERS ======
     useEffect(()=>{
-        const unsubs = [
-            FS.listen('employees', d => { setEmployees(d); ls.set('bm_employees',d); }),
-            FS.listen('invoices', d => { setInvoices(d); ls.set('bm_invoices',d); }),
-            FS.listen('contracts', d => { setContracts(d); ls.set('bm_contracts',d); }),
-            FS.listen('applications', d => { setApplications(d); ls.set('bm_applications',d); }),
-            FS.listen('tasks', d => { setTasks(d); ls.set('bm_tasks',d); }),
-            FS.listen('grades', d => { setGrades(d); ls.set('bm_grades',d); }),
-            FS.listen('serviceLogs', d => { setServiceLogs(d); ls.set('bm_service_logs',d); }),
-            FS.docListen('settings/theme', d => { setTheme(d); ls.set('bm_theme',d); }, INIT_THEME),
-            FS.docListen('settings/config', d => { setConfig(d); ls.set('bm_config',d); }, INIT_CONFIG),
-            FS.docListen('settings/messages', d => { setCustomMessages(d); ls.set('bm_messages',d); }, INIT_MESSAGES),
-        ];
+        let unsubs = [];
+        window._authReady.then(() => {
+            unsubs = [
+                FS.listen('employees', d => { setEmployees(d); ls.set('bm_employees',d); }),
+                FS.listen('invoices', d => { setInvoices(d); ls.set('bm_invoices',d); }),
+                FS.listen('contracts', d => { setContracts(d); ls.set('bm_contracts',d); }),
+                FS.listen('applications', d => { setApplications(d); ls.set('bm_applications',d); }),
+                FS.listen('tasks', d => { setTasks(d); ls.set('bm_tasks',d); }),
+                FS.listen('grades', d => { setGrades(d); ls.set('bm_grades',d); }),
+                FS.listen('serviceLogs', d => { setServiceLogs(d); ls.set('bm_service_logs',d); }),
+                FS.docListen('settings/theme', d => { setTheme(d); ls.set('bm_theme',d); }, INIT_THEME),
+                FS.docListen('settings/config', d => { setConfig(d); ls.set('bm_config',d); }, INIT_CONFIG),
+                FS.docListen('settings/messages', d => { setCustomMessages(d); ls.set('bm_messages',d); }, INIT_MESSAGES),
+            ];
+        });
         return () => unsubs.forEach(u => u());
     },[]);
 
@@ -1195,7 +1239,7 @@ function App() {
                         <Menu size={20}/>
                     </button>
                     <div className="flex-1"/>
-{/* Firebase Cloud — synced in real-time */}
+                    
                     {/* Notification bell */}
                     <div className="relative">
                         <button className="p-2 rounded-lg hover:bg-white/5 transition-colors relative" style={{color:'var(--text-dim)'}} onClick={()=>setModal({type:'notifs'})}>
@@ -2313,8 +2357,7 @@ function SalairesTab({weekStats,grades,selectedDate,setSelectedDate,generatePayS
 // =============================================
 // SETTINGS TAB
 // =============================================
-function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handleSaveGrades,confirmResetId,setConfirmResetId,handleResetStats,customMessages,setCustomMessages,handleSaveMessages,isEditingMessages,setIsEditingMessages}){
-    const sector=BUSINESS_SECTORS.find(s=>s.id===theme.sector)||BUSINESS_SECTORS[BUSINESS_SECTORS.length-1];
+function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handleSaveGrades,confirmResetId,setConfirmResetId,handleResetStats,customMessages,setCustomMessages,handleSaveMessages,isEditingMessages,setIsEditingMessages,sector}){
     return (
         <div className="space-y-6 max-w-3xl">
             <div><h2 className="section-title">Configuration</h2><p className="section-sub">Personnalisation & paramètres globaux</p></div>
@@ -2354,7 +2397,7 @@ function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handl
 
             {/* SERVICES */}
             <div className="card p-5 space-y-4">
-                <h3 className="font-bold text-white flex items-center gap-2"><Package size={16} className="text-emerald-400"/>Types de prestations</h3>
+                <h3 className="font-bold text-white flex items-center gap-2"><Package size={16} className="text-emerald-400"/>Types de {sector.serviceLabel.toLowerCase()}s</h3>
                 {(config.services||[]).map((svc,i)=>(
                     <div key={svc.id} className="flex items-center gap-3 p-3 rounded-xl" style={{background:'rgba(0,0,0,0.2)',border:'1px solid var(--border)'}}>
                         <input className="input-base flex-1 py-2 text-sm" value={svc.name} onChange={e=>{const n=[...config.services];n[i].name=e.target.value;handleSaveConfig({...config,services:n});}}/>
@@ -2369,8 +2412,8 @@ function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handl
                         <button onClick={()=>handleSaveConfig({...config,services:config.services.filter((_,j)=>j!==i)})} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={15}/></button>
                     </div>
                 ))}
-                <button onClick={()=>handleSaveConfig({...config,services:[...(config.services||[]),{id:`srv_${Date.now()}`,name:'Nouveau service',costPercent:0,bonusPercent:null}]})} className="w-full py-2.5 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:text-white" style={{borderColor:'rgba(255,255,255,0.1)',color:'var(--text-dim)'}}>
-                    <Plus size={15}/>Ajouter une prestation
+                <button onClick={()=>handleSaveConfig({...config,services:[...(config.services||[]),{id:`srv_${Date.now()}`,name:`Nouveau ${sector.serviceLabel.toLowerCase()}`,costPercent:0,bonusPercent:null}]})} className="w-full py-2.5 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:text-white" style={{borderColor:'rgba(255,255,255,0.1)',color:'var(--text-dim)'}}>
+                    <Plus size={15}/>Ajouter une catégorie
                 </button>
             </div>
 
@@ -2379,7 +2422,7 @@ function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handl
                 <div className="p-5 border-b" style={{borderColor:'var(--border)'}}><h3 className="font-bold text-white flex items-center gap-2"><Layers size={16} className="text-blue-400"/>Grilles de salaires</h3></div>
                 <div className="overflow-x-auto">
                     <table className="data-table">
-                        <thead><tr><th>Grade</th><th className="text-center">Prime %</th><th className="text-center">Salaire max</th><th className="text-center">Suppr.</th></tr></thead>
+                        <thead><tr><th>Grade</th><th className="text-center">Prime par défaut %</th><th className="text-center">Salaire max</th><th className="text-center">Suppr.</th></tr></thead>
                         <tbody>
                             {grades.map(g=>(
                                 <tr key={g.id}>
@@ -2400,7 +2443,7 @@ function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handl
             {/* DANGER ZONE */}
             <div className="card p-5 border-t-2" style={{borderTopColor:'#ef4444'}}>
                 <h3 className="font-bold text-red-400 mb-3 flex items-center gap-2"><AlertCircle size={16}/>Zone de danger</h3>
-                <p className="text-sm mb-4" style={{color:'var(--text-dim)'}}>Effacer définitivement tout l'historique des factures. Action irréversible.</p>
+                <p className="text-sm mb-4" style={{color:'var(--text-dim)'}}>Effacer définitivement tout l'historique des {sector.invoiceLabel.toLowerCase()}s. Action irréversible.</p>
                 {confirmResetId!=='reset'?(
                     <button onClick={()=>setConfirmResetId('reset')} className="btn btn-danger"><Trash2 size={15}/>Réinitialiser les statistiques</button>
                 ):(
