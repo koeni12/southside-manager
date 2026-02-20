@@ -141,7 +141,8 @@
                 { id: 'srv_clean', name: 'Nettoyage', costPercent: 0, bonusPercent: null },
                 { id: 'srv_tow', name: 'Dépannage', costPercent: 0, bonusPercent: null },
                 { id: 'srv_other', name: 'Autre', costPercent: 0, bonusPercent: null }
-            ]
+            ],
+            bonusesEnabled: true // <--- NOUVEAU REGLAGE SYSTEME DE PRIME
         };
 
         const INITIAL_GRADES = [
@@ -222,7 +223,6 @@
         // --- PDF GENERATOR ---
         const generateInvoicePDF = (invoice, theme) => {
             const doc = new jsPDF();
-            // Utilisation d'une couleur par défaut si le thème n'est pas reconnu par jsPDF (on reste sur un bleu sûr)
             doc.setFillColor(79, 70, 229); 
             doc.rect(0, 0, 210, 30, 'F');
             doc.setTextColor(255, 255, 255);
@@ -323,13 +323,13 @@
             // Primes
             if (salaryData.bonus > 0) {
                 doc.setTextColor(16, 185, 129); // Vert
-                doc.text("Prime sur Objectif (Quota Atteint)", 20, y);
+                doc.text("Prime sur Objectif (Rentabilité Atteinte)", 20, y);
                 doc.text(`$${salaryData.bonus.toLocaleString()}`, 190, y, { align: 'right' });
                 doc.setTextColor(255, 255, 255);
                 y += 10;
             } else {
                 doc.setTextColor(150, 150, 150);
-                doc.text("Prime sur Objectif (Non Atteint)", 20, y);
+                doc.text("Prime sur Objectif", 20, y);
                 doc.text("$0", 190, y, { align: 'right' });
                 doc.setTextColor(255, 255, 255);
                 y += 10;
@@ -564,8 +564,9 @@
                         setCurrentUser(user);
                         setDashboardTargetUser(user);
                         
+                        const userIsBoss = ['Patron', 'Co-patron'].includes(user.grade);
                         // Redirection intelligente selon le rôle
-                        if (user.role === 'admin') setActiveTab('dashboard');
+                        if (userIsBoss || user.role === 'admin') setActiveTab('dashboard');
                         else if (user.grade === 'Avocat') setActiveTab('hr'); 
                         else setActiveTab('personal');
                         
@@ -731,6 +732,7 @@
                                 { id: 'srv_other', name: 'Autre', costPercent: 0 }
                             ];
                         }
+                        if (data.bonusesEnabled === undefined) data.bonusesEnabled = true; // Fallback pour les anciennes configs
                         setConfig(data);
                     } else {
                         setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'config'), INITIAL_CONFIG);
@@ -792,7 +794,9 @@
 
                 const totalRevenue = weeklyInvoices.reduce((acc, curr) => acc + curr.price, 0);
                 const totalProfit = weeklyInvoices.reduce((acc, curr) => acc + curr.profit, 0);
-                const totalBonuses = weeklyInvoices.reduce((acc, curr) => acc + curr.bonus, 0);
+                
+                // Si les primes sont désactivées globalement, le total est 0
+                const totalBonuses = config.bonusesEnabled !== false ? weeklyInvoices.reduce((acc, curr) => acc + curr.bonus, 0) : 0;
 
                 // Use sortedEmployees instead of employees to maintain grade order
                 const employeeStats = sortedEmployees.map(emp => {
@@ -800,9 +804,11 @@
                     const revenue = empInvoices.reduce((acc, curr) => acc + curr.price, 0);
                     // AJOUT DU CALCUL DU PROFIT PAR EMPLOYÉ
                     const profit = empInvoices.reduce((acc, curr) => acc + (curr.profit || 0), 0);
-                    const bonusTheorique = empInvoices.reduce((acc, curr) => acc + curr.bonus, 0);
                     
-                    // --- NOUVEAU : CALCUL DES HEURES PAR EMPLOYÉ ---
+                    // Si primes désactivées, bonus théorique est 0
+                    const bonusTheorique = config.bonusesEnabled !== false ? empInvoices.reduce((acc, curr) => acc + curr.bonus, 0) : 0;
+                    
+                    // --- CALCUL DES HEURES PAR EMPLOYÉ ---
                     const empLogs = serviceLogs.filter(log => {
                         const logDate = new Date(log.date);
                         return log.employeeId === emp.id && logDate >= start && logDate <= end;
@@ -838,7 +844,7 @@
                 const pieData = Object.entries(serviceDist).map(([name, value]) => ({ name, value }));
                 
                 return { totalRevenue, totalProfit, totalBonuses, employeeStats, topClients, activityData, pieData, weeklyInvoices };
-            }, [invoices, sortedEmployees, selectedDate, serviceLogs]);
+            }, [invoices, sortedEmployees, selectedDate, serviceLogs, config.bonusesEnabled]); // <-- Ajout de config.bonusesEnabled aux dépendances
 
             // --- CLIENT BASE STATS (MOVED TO TOP LEVEL TO FIX HOOK ERROR) ---
             const clientStats = useMemo(() => {
@@ -908,7 +914,8 @@
                     
                     showNotification(`Bienvenue ${user.name}.`);
 
-                    if (user.role === 'admin') setActiveTab('dashboard');
+                    const userIsBoss = ['Patron', 'Co-patron'].includes(user.grade);
+                    if (userIsBoss || user.role === 'admin') setActiveTab('dashboard');
                     else if (user.grade === 'Avocat') setActiveTab('hr'); 
                     else setActiveTab('personal');
                 } else {
@@ -1045,7 +1052,7 @@
                 const metrics = calculateInvoiceMetrics(newInvoice.type, price);
                 const gradeInfo = grades.find(g => g.name === currentUser.grade);
                 
-                // --- NOUVELLE LOGIQUE DE PRIME ---
+                // --- LOGIQUE DE PRIME AVEC OPTION DÉSACTIVATION ---
                 // 1. Chercher la config du service
                 const serviceConfig = (config.services || []).find(s => s.name === newInvoice.type);
                 
@@ -1056,8 +1063,8 @@
                     bonusRate = parseFloat(serviceConfig.bonusPercent);
                 }
 
-                // 3. Calculer la prime sur le Bénéfice Net
-                const bonus = (metrics.netProfit > 0) ? (metrics.netProfit * bonusRate / 100) : 0;
+                // 3. Calculer la prime sur le Bénéfice Net SEULEMENT SI PRIMES ACTIVÉES
+                const bonus = (config.bonusesEnabled !== false && metrics.netProfit > 0) ? (metrics.netProfit * bonusRate / 100) : 0;
 
                 const invoiceEntry = {
                     date: new Date().toISOString(),
@@ -1167,9 +1174,10 @@
             const handleAddEmployee = async () => {
                 if (!newEmployee.name || !newEmployee.grade) return;
                 const id = `e${Date.now().toString().slice(-4)}`;
+                const isAdmin = ['Patron', 'Co-patron'].includes(newEmployee.grade);
                 const newEmp = {
-                    id, name: newEmployee.name, grade: newEmployee.grade, role: 'user', password: '123',
-                    dob: newEmployee.dob, contractUrl: newEmployee.contractUrl, iban: newEmployee.iban
+                    id, name: newEmployee.name, grade: newEmployee.grade, role: isAdmin ? 'admin' : 'user', password: '123',
+                    dob: newEmployee.dob, contractUrl: newEmployee.contractUrl, iban: newEmployee.iban, isServiceActive: false
                 };
                 if (isOffline) {
                     setEmployees(prev => [...prev, newEmp]);
@@ -1195,13 +1203,16 @@
 
             // FIX: Using docId for update
             const handleSaveEdit = async () => {
+                const isAdmin = ['Patron', 'Co-patron'].includes(editingEmployee.grade);
+                const updatedEmp = { ...editingEmployee, role: isAdmin ? 'admin' : 'user' };
+
                 if (isOffline) {
-                    setEmployees(prev => prev.map(emp => emp.id === editingEmployee.id ? editingEmployee : emp));
+                    setEmployees(prev => prev.map(emp => emp.id === updatedEmp.id ? updatedEmp : emp));
                 } else {
                     // Extract docId to use as ref, but also keep it out of data if desired, 
                     // though usually storing it back is harmless.
-                    const docRefId = editingEmployee.docId || editingEmployee.id;
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', docRefId), editingEmployee);
+                    const docRefId = updatedEmp.docId || updatedEmp.id;
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'employees', docRefId), updatedEmp);
                 }
                 setEditingEmployee(null);
                 showNotification("Informations mises à jour !");
@@ -1520,7 +1531,10 @@
                 const myRevenue = myInvoices.reduce((acc, curr) => acc + curr.price, 0);
                 // Calcul du bénéfice net personnel
                 const myProfit = myInvoices.reduce((acc, curr) => acc + (curr.profit || 0), 0);
-                const myBonusTheorique = myInvoices.reduce((acc, curr) => acc + curr.bonus, 0);
+                
+                // Théorique bonus (sera 0 si désactivé par la config dans weeklyStats)
+                const employeeStat = weeklyStats.employeeStats.find(e => e.id === targetUser.id);
+                const myBonusTheorique = employeeStat ? employeeStat.bonusTheorique : 0;
                 
                 const gradeInfo = grades.find(g => g.name === targetUser.grade);
                 const maxSalary = gradeInfo ? gradeInfo.maxSalary : 0;
@@ -1659,12 +1673,16 @@
                                     </div>
                                 </div>
                                 <p className="text-3xl font-black text-white">${(earnedSalary + (isComplete ? myBonusTheorique : 0)).toLocaleString()}</p>
-                                {!isComplete && (
+                                
+                                {config.bonusesEnabled === false ? (
+                                    <div className="mt-2 flex items-center gap-2 text-xs text-red-400 bg-red-500/10 px-2 py-1 rounded">
+                                        <AlertCircle size={12} /><span>Primes désactivées par la direction</span>
+                                    </div>
+                                ) : !isComplete ? (
                                     <div className="mt-2 flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 px-2 py-1 rounded">
                                         <Lock size={12} /><span>Prime de ${myBonusTheorique.toFixed(0)} bloquée</span>
                                     </div>
-                                )}
-                                {isComplete && (
+                                ) : (
                                     <div className="mt-2 flex items-center gap-2 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded">
                                         <CheckCircle size={12} /><span>Prime débloquée !</span>
                                     </div>
@@ -2637,7 +2655,7 @@
                         <h2 className="text-3xl font-black text-white tracking-tight">Salaires & Primes</h2>
                         <p className="text-gray-400">Suivi des objectifs de la semaine sélectionnée.</p>
                     </div>
-                    {/* MODIFICATION ICI : Ajout du wrapper overflow-x-auto et min-width sur la table */}
+                    
                     <GlassCard className="overflow-hidden flex flex-col">
                         <div className={`p-1 bg-gradient-to-r from-${theme.secondaryColor || 'violet'}-500 via-${theme.primaryColor}-500 to-blue-500 opacity-20`}></div>
                         <div className="overflow-x-auto custom-scrollbar">
@@ -2665,7 +2683,8 @@
                                         const earnedSalary = maxSalary * (progress / 100);
                                         
                                         const bonusAmount = emp.bonusTheorique;
-                                        const finalBonus = isComplete ? bonusAmount : 0; 
+                                        const finalBonus = (isComplete && config.bonusesEnabled !== false) ? bonusAmount : 0; 
+                                        
                                         return (
                                             <tr key={emp.id} className="group hover:bg-white/5 transition-colors duration-200">
                                                 <td className="p-5">
@@ -2698,7 +2717,12 @@
                                                     <div className="text-xs text-gray-600">Max: ${maxSalary}</div>
                                                 </td>
                                                 <td className="p-5 text-right">
-                                                    {isComplete ? (
+                                                    {config.bonusesEnabled === false ? (
+                                                        <div className="flex flex-col items-end animate-fadeIn">
+                                                            <div className="flex items-center gap-2 text-red-400 font-mono opacity-80"><Lock size={14} /> +$0</div>
+                                                            <span className="text-[10px] text-red-400/60 uppercase tracking-wide">Primes désactivées</span>
+                                                        </div>
+                                                    ) : isComplete ? (
                                                         <div className="flex items-center justify-end gap-2 text-emerald-400 font-bold font-mono animate-fadeIn"><Unlock size={14} /> +${bonusAmount.toLocaleString()}</div>
                                                     ) : (
                                                         <div className="flex flex-col items-end animate-fadeIn">
@@ -2768,6 +2792,24 @@
                                     ))}
                                 </div>
                                 <p className="text-xs text-gray-500 mt-2">Couleur utilisée pour les boutons, les icônes et les accents.</p>
+                            </div>
+                        </div>
+                    </GlassCard>
+
+                    {/* --- SYSTEME DE PRIMES (ACTIVATION GLOBALE) --- */}
+                    <GlassCard className={`p-6 border-t-4 border-t-amber-500`}>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <Award size={20} className="text-amber-400"/> Système de Primes
+                                </h3>
+                                <p className="text-xs text-gray-400 mt-1">Activer ou désactiver la distribution des primes pour tous les employés.</p>
+                            </div>
+                            <div 
+                                className={`w-14 h-7 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300 ease-in-out ${config.bonusesEnabled !== false ? 'bg-emerald-500' : 'bg-gray-600'}`}
+                                onClick={() => saveConfig('bonusesEnabled', !(config.bonusesEnabled !== false))}
+                            >
+                                <div className={`bg-white w-5 h-5 rounded-full shadow-md transform transition-transform duration-300 ease-in-out ${config.bonusesEnabled !== false ? 'translate-x-7' : 'translate-x-0'}`}></div>
                             </div>
                         </div>
                     </GlassCard>
@@ -2885,9 +2927,6 @@
                                             <input type="number" value={grade.maxSalary} onChange={(e) => handleUpdateGrade(grade.id, 'maxSalary', e.target.value === '' ? 0 : parseInt(e.target.value))} className="bg-black/40 border border-gray-700 rounded-lg px-2 py-1 w-24 text-center text-emerald-400 focus:border-emerald-500 outline-none font-mono" />
                                         </td>
                                         <td className="p-4 text-center">
-                                            <input type="number" value={grade.quota} onChange={(e) => handleUpdateGrade(grade.id, 'quota', e.target.value === '' ? 0 : parseInt(e.target.value))} className="bg-black/40 border border-gray-700 rounded-lg px-2 py-1 w-20 text-center text-white focus:border-white outline-none font-mono" />
-                                        </td>
-                                        <td className="p-4 text-center">
                                             <button onClick={() => handleDeleteGrade(grade.id)} className="p-2 text-red-400 hover:text-white hover:bg-red-500/20 rounded-lg transition-colors"><Trash2 size={16} /></button>
                                         </td>
                                     </tr>
@@ -2969,13 +3008,13 @@
                             )}
                             
                             {/* Admin or Lawyer Access */}
-                            {(currentUser.role === 'admin' || currentUser.grade === 'Avocat') && (
+                            {(isBoss || currentUser.role === 'admin' || currentUser.grade === 'Avocat') && (
                                 <>
                                     <p className="px-4 text-xs font-bold text-gray-600 uppercase tracking-wider mt-6 mb-2">Gestion</p>
-                                    {currentUser.role === 'admin' && <NavItem tabId="dashboard" icon={LayoutDashboard} label="Dashboard Global" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />}
+                                    {(isBoss || currentUser.role === 'admin') && <NavItem tabId="dashboard" icon={LayoutDashboard} label="Dashboard Global" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />}
                                     <NavItem tabId="hr" icon={Briefcase} label="Ressources Humaines" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />
-                                    {currentUser.role === 'admin' && <NavItem tabId="salaires" icon={Award} label="Salaires & Primes" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />}
-                                    {currentUser.role === 'admin' && (
+                                    {(isBoss || currentUser.role === 'admin') && <NavItem tabId="salaires" icon={Award} label="Salaires & Primes" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />}
+                                    {(isBoss || currentUser.role === 'admin') && (
                                         <>
                                             <p className="px-4 text-xs font-bold text-gray-600 uppercase tracking-wider mt-6 mb-2">Admin</p>
                                             <NavItem tabId="settings" icon={Settings} label="Configuration" activeTab={activeTab} onClick={handleNavClick} themeColor={theme.primaryColor} />
@@ -3009,11 +3048,11 @@
                             {activeTab === 'clients' && renderClients()}
                             {activeTab === 'tarifs' && renderPrices()}
                             {activeTab === 'aide' && renderHelp()}
-                            {(currentUser.role === 'admin' || currentUser.grade === 'Avocat') && activeTab === 'hr' && renderHR()}
+                            {(isBoss || currentUser.role === 'admin' || currentUser.grade === 'Avocat') && activeTab === 'hr' && renderHR()}
                             {activeTab === 'contracts' && renderContracts()}
-                            {currentUser.role === 'admin' && activeTab === 'dashboard' && renderDashboard()}
-                            {currentUser.role === 'admin' && activeTab === 'salaires' && renderSalaries()}
-                            {currentUser.role === 'admin' && activeTab === 'settings' && renderSettings()}
+                            {(isBoss || currentUser.role === 'admin') && activeTab === 'dashboard' && renderDashboard()}
+                            {(isBoss || currentUser.role === 'admin') && activeTab === 'salaires' && renderSalaries()}
+                            {(isBoss || currentUser.role === 'admin') && activeTab === 'settings' && renderSettings()}
                         </div>
                         {notification && <div className={`fixed bottom-8 right-8 z-50 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 animate-slideUp backdrop-blur-xl border border-white/10 ${notification.type === 'error' ? 'bg-red-500/20 text-red-200' : 'bg-emerald-500/20 text-emerald-200'}`}><div><p className="font-bold text-white">{notification.type === 'error' ? 'Erreur' : 'Succès'}</p><p className="text-sm opacity-80">{notification.msg}</p></div></div>}
                     </main>
