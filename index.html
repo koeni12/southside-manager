@@ -259,25 +259,12 @@
         .spinner { width:24px; height:24px; border:3px solid rgba(255,255,255,0.1); border-top-color:var(--accent); border-radius:50%; animation:spin 0.7s linear infinite; }
         @keyframes spin { to{transform:rotate(360deg)} }
     </style>
-    <script type="importmap">
-    {
-        "imports": {
-            "react": "https://esm.sh/react@18.2.0",
-            "react-dom": "https://esm.sh/react-dom@18.2.0",
-            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-            "lucide-react": "https://esm.sh/lucide-react@0.263.1?external=react",
-            "recharts": "https://esm.sh/recharts@2.12.0?external=react,react-dom",
-            "jspdf": "https://esm.sh/jspdf@2.5.1"
-            
-        }
-    }
-    </script>
 </head>
 <body class="mesh-bg">
 <div id="root"></div>
 <script type="text/babel" data-type="module">
-import React, { useState, useEffect, useMemo, useRef, useCallback, memo } from 'react';
-import { createRoot } from 'react-dom/client';
+import React, { useState, useEffect, useMemo, useRef, useCallback, memo } from 'https://esm.sh/react@18.2.0';
+import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
 import {
     LayoutDashboard, FileText, History, Users, BarChart3, Settings, LogOut, Plus, Trash2, Save,
     TrendingUp, Wallet, Award, Search, CheckCircle, AlertCircle, Menu, X, ChevronRight, ChevronLeft,
@@ -288,9 +275,9 @@ import {
     PieChart, Zap, Star, Globe, Coffee, Shield, Layers, RefreshCw, ArrowUp, ArrowDown,
     ChevronDown, Hash, Inbox, Archive, CheckSquare, Circle, Kanban, BookOpen, FileSpreadsheet,
     Lightbulb, Map, Grid, List, MoreVertical, Share, Printer, Mail, Home, Cpu, AlignLeft
-} from 'lucide-react';
-import { AreaChart, Area, BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell, Legend } from 'recharts';
-import { jsPDF } from 'jspdf';
+} from 'https://esm.sh/lucide-react@0.263.1';
+import { AreaChart, Area, BarChart as ReBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart as RePieChart, Pie, Cell, Legend } from 'https://esm.sh/recharts@2.12.0';
+import { jsPDF } from 'https://esm.sh/jspdf@2.5.1';
 
 // =============================================
 // FIRESTORE HELPERS (Connecté à la DB d'origine)
@@ -386,7 +373,6 @@ const FS = {
     }
 };
 
-
 // =============================================
 // CONSTANTS & HELPERS
 // =============================================
@@ -428,6 +414,13 @@ const getGradeColor = g => {
     if(l.includes('chef')||l.includes('manager')||l.includes('responsable')) return 'blue';
     if(l.includes('senior')||l.includes('expert')) return 'green';
     return 'gray';
+};
+
+// --- NOUVEAU HELPER : Vérifier si un grade donne les droits Admin ---
+const checkIsAdmin = (role, grade) => {
+    if (role === 'admin') return true;
+    const l = (grade || '').toLowerCase();
+    return l.includes('patron') || l.includes('directeur') || l.includes('co-patron');
 };
 
 // Local Storage helpers
@@ -615,6 +608,71 @@ const genExcelCSV = (invoices, filename='export.csv') => {
 };
 
 // =============================================
+// LOGIN SCREEN
+// =============================================
+function LoginScreen({theme,employees,loginForm,setLoginForm,loginError,handleLogin,stayConnected,setStayConnected,authMode,setAuthMode,appForm,setAppForm,handleSubmitApp,toast,showToast,sector}){
+    return (
+        <div className="min-h-screen flex items-center justify-center p-4 relative">
+            <div className="w-full max-w-md anim-up">
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center text-2xl font-black text-white" style={{background:`linear-gradient(135deg,var(--accent),var(--accent2))`}}>
+                        {theme.appName.charAt(0)}
+                    </div>
+                    <h1 className="text-2xl font-black text-white" style={{letterSpacing:'-.03em'}}>{theme.appName}</h1>
+                    <p className="text-sm mt-1" style={{color:'var(--text-dim)'}}>{sector.label} · Espace collaboratif</p>
+                </div>
+
+                <div className="card p-7">
+                    {authMode==='login' ? (
+                        <>
+                            <h2 className="font-display text-lg font-bold text-white mb-5">Connexion</h2>
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <Input label="Identifiant" placeholder="Prénom Nom" value={loginForm.username} onChange={e=>setLoginForm({...loginForm,username:e.target.value})} prefix={User}/>
+                                <Input label="Mot de passe" type="password" placeholder="Code d'accès" value={loginForm.password} onChange={e=>setLoginForm({...loginForm,password:e.target.value})} prefix={Lock}/>
+                                {loginError && <div className="flex items-center gap-2 p-3 rounded-lg text-sm text-red-400" style={{background:'rgba(239,68,68,0.1)'}}><AlertCircle size={15}/>{loginError}</div>}
+                                <label className="flex items-center gap-3 cursor-pointer py-1">
+                                    <div className={`w-5 h-5 rounded flex items-center justify-center transition-all ${stayConnected?'text-white':'border'}`} style={stayConnected?{background:'var(--accent)'}:{borderColor:'rgba(255,255,255,0.2)'}} onClick={()=>setStayConnected(!stayConnected)}>
+                                        {stayConnected&&<CheckCircle size={14}/>}
+                                    </div>
+                                    <span className="text-sm" style={{color:'var(--text-dim)'}}>Rester connecté</span>
+                                </label>
+                                <button type="submit" className="btn btn-primary w-full justify-center py-3">Se connecter</button>
+                            </form>
+                            <div className="divider"/>
+                            <button onClick={()=>setAuthMode('apply')} className="w-full py-3 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:text-white" style={{borderColor:'rgba(255,255,255,0.1)',color:'var(--text-dim)'}}>
+                                <Briefcase size={16}/> Déposer une candidature
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <button onClick={()=>setAuthMode('login')} className="flex items-center gap-2 text-sm mb-5 transition-colors hover:text-white" style={{color:'var(--text-dim)'}}>
+                                <ChevronLeft size={16}/> Retour
+                            </button>
+                            <h2 className="font-display text-lg font-bold text-white mb-5">Candidature</h2>
+                            <div className="space-y-4">
+                                <Input label="Nom complet *" value={appForm.name} onChange={e=>setAppForm({...appForm,name:e.target.value})} placeholder="Prénom Nom"/>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Input label="Date naissance" type="date" value={appForm.dob} onChange={e=>setAppForm({...appForm,dob:e.target.value})}/>
+                                    <Input label="Age réel" type="number" value={appForm.ageHRP} onChange={e=>setAppForm({...appForm,ageHRP:e.target.value})} placeholder="Ex: 22"/>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <Input label="Téléphone" value={appForm.phoneRP} onChange={e=>setAppForm({...appForm,phoneRP:e.target.value})} placeholder="06..."/>
+                                    <Input label="Discord" value={appForm.discord} onChange={e=>setAppForm({...appForm,discord:e.target.value})} placeholder="user#1234"/>
+                                </div>
+                                <Input label="Disponibilités" value={appForm.availability} onChange={e=>setAppForm({...appForm,availability:e.target.value})} placeholder="Soirs, week-ends..."/>
+                                <Input label="Motivation" value={appForm.motivation} onChange={e=>setAppForm({...appForm,motivation:e.target.value})} placeholder="Pourquoi nous rejoindre ?" rows={3}/>
+                                <button onClick={handleSubmitApp} className="btn btn-primary w-full justify-center py-3"><Send size={16}/>Envoyer</button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
+            {toast && <Toast msg={toast.msg} type={toast.type}/>}
+        </div>
+    );
+}
+
+// =============================================
 // MAIN APP
 // =============================================
 function App() {
@@ -680,8 +738,7 @@ function App() {
     const [confirmResetId, setConfirmResetId] = useState(null);
 
     // ====== PERMISSIONS ======
-    const isBoss = useMemo(()=>['admin'].includes(currentUser?.role),[currentUser]);
-    const isManager = useMemo(()=>['admin','manager'].includes(currentUser?.role),[currentUser]);
+    const isBoss = useMemo(()=> checkIsAdmin(currentUser?.role, currentUser?.grade), [currentUser]);
 
     // ====== THEME CSS VAR ======
     useEffect(()=>{
@@ -788,7 +845,11 @@ function App() {
         const savedId=ls.get('bm_session',null);
         if(savedId&&!currentUser&&employees.length>0){
             const u=employees.find(e=>e.id===savedId);
-            if(u){ setCurrentUser(u); setDashTarget(u); setActiveTab(u.role==='admin'?'dashboard':'personal'); showToast(`Bon retour, ${u.name.split(' ')[0]} !`); }
+            if(u){ 
+                setCurrentUser(u); setDashTarget(u); 
+                setActiveTab(checkIsAdmin(u.role, u.grade) ? 'dashboard' : 'personal'); 
+                showToast(`Bon retour, ${u.name.split(' ')[0]} !`); 
+            }
         }
     },[employees]);
 
@@ -901,7 +962,7 @@ function App() {
         if(u){
             if(stayConnected) ls.set('bm_session',u.id); else ls.set('bm_session',null);
             setCurrentUser(u); setDashTarget(u);
-            setActiveTab(u.role==='admin'?'dashboard':'personal');
+            setActiveTab(checkIsAdmin(u.role, u.grade) ? 'dashboard' : 'personal');
             setLoginError('');
             showToast(`Bienvenue, ${u.name.split(' ')[0]} !`);
         } else {
@@ -968,7 +1029,8 @@ function App() {
 
     const handleAddEmployee = useCallback(async()=>{
         if(!newEmployee.name||!newEmployee.grade){ showToast('Nom et grade requis.','error'); return; }
-        const emp={...newEmployee,id:`e${Date.now()}`,isServiceActive:false};
+        const role = checkIsAdmin(newEmployee.role, newEmployee.grade) ? 'admin' : 'user';
+        const emp={...newEmployee, role, id:`e${Date.now()}`,isServiceActive:false};
         setEmployees(p=>[...p,emp]);
         FS.upsert('employees', emp);
         setNewEmployee({name:'',grade:'',dob:'',contractUrl:'',iban:'',role:'user',password:'1234'});
@@ -976,8 +1038,10 @@ function App() {
     },[newEmployee,showToast]);
 
     const handleSaveEmployee = useCallback(async()=>{
-        setEmployees(p=>p.map(e=>e.id===editingEmployee.id?editingEmployee:e));
-        FS.upsert('employees', editingEmployee);
+        const role = checkIsAdmin(editingEmployee.role, editingEmployee.grade) ? 'admin' : 'user';
+        const updatedEmp = { ...editingEmployee, role };
+        setEmployees(p=>p.map(e=>e.id===updatedEmp.id?updatedEmp:e));
+        FS.upsert('employees', updatedEmp);
         setEditingEmployee(null); setModal(null);
         showToast('Informations mises à jour.');
     },[editingEmployee,showToast]);
@@ -1303,71 +1367,6 @@ function App() {
                 <EmployeeModal emp={editingEmployee} setEmp={setEditingEmployee} grades={grades} handleSave={handleSaveEmployee} handleFire={handleFireEmployee} currentUser={currentUser} isBoss={isBoss} theme={theme}/>
             )}
 
-            {toast && <Toast msg={toast.msg} type={toast.type}/>}
-        </div>
-    );
-}
-
-// =============================================
-// LOGIN SCREEN
-// =============================================
-function LoginScreen({theme,employees,loginForm,setLoginForm,loginError,handleLogin,stayConnected,setStayConnected,authMode,setAuthMode,appForm,setAppForm,handleSubmitApp,toast,sector}){
-    return (
-        <div className="min-h-screen flex items-center justify-center p-4 relative">
-            <div className="w-full max-w-md anim-up">
-                <div className="text-center mb-8">
-                    <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center text-2xl font-black text-white" style={{background:`linear-gradient(135deg,var(--accent),var(--accent2))`}}>
-                        {theme.appName.charAt(0)}
-                    </div>
-                    <h1 className="text-2xl font-black text-white" style={{letterSpacing:'-.03em'}}>{theme.appName}</h1>
-                    <p className="text-sm mt-1" style={{color:'var(--text-dim)'}}>{sector.label} · Espace collaboratif</p>
-                </div>
-
-                <div className="card p-7">
-                    {authMode==='login' ? (
-                        <>
-                            <h2 className="font-display text-lg font-bold text-white mb-5">Connexion</h2>
-                            <form onSubmit={handleLogin} className="space-y-4">
-                                <Input label="Identifiant" placeholder="Prénom Nom" value={loginForm.username} onChange={e=>setLoginForm({...loginForm,username:e.target.value})} prefix={User}/>
-                                <Input label="Mot de passe" type="password" placeholder="Code d'accès" value={loginForm.password} onChange={e=>setLoginForm({...loginForm,password:e.target.value})} prefix={Lock}/>
-                                {loginError && <div className="flex items-center gap-2 p-3 rounded-lg text-sm text-red-400" style={{background:'rgba(239,68,68,0.1)'}}><AlertCircle size={15}/>{loginError}</div>}
-                                <label className="flex items-center gap-3 cursor-pointer py-1">
-                                    <div className={`w-5 h-5 rounded flex items-center justify-center transition-all ${stayConnected?'text-white':'border'}`} style={stayConnected?{background:'var(--accent)'}:{borderColor:'rgba(255,255,255,0.2)'}} onClick={()=>setStayConnected(!stayConnected)}>
-                                        {stayConnected&&<CheckCircle size={14}/>}
-                                    </div>
-                                    <span className="text-sm" style={{color:'var(--text-dim)'}}>Rester connecté</span>
-                                </label>
-                                <button type="submit" className="btn btn-primary w-full justify-center py-3">Se connecter</button>
-                            </form>
-                            <div className="divider"/>
-                            <button onClick={()=>setAuthMode('apply')} className="w-full py-3 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-all hover:text-white" style={{borderColor:'rgba(255,255,255,0.1)',color:'var(--text-dim)'}}>
-                                <Briefcase size={16}/> Déposer une candidature
-                            </button>
-                        </>
-                    ) : (
-                        <>
-                            <button onClick={()=>setAuthMode('login')} className="flex items-center gap-2 text-sm mb-5 transition-colors hover:text-white" style={{color:'var(--text-dim)'}}>
-                                <ChevronLeft size={16}/> Retour
-                            </button>
-                            <h2 className="font-display text-lg font-bold text-white mb-5">Candidature</h2>
-                            <div className="space-y-4">
-                                <Input label="Nom complet *" value={appForm.name} onChange={e=>setAppForm({...appForm,name:e.target.value})} placeholder="Prénom Nom"/>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Input label="Date naissance" type="date" value={appForm.dob} onChange={e=>setAppForm({...appForm,dob:e.target.value})}/>
-                                    <Input label="Age réel" type="number" value={appForm.ageHRP} onChange={e=>setAppForm({...appForm,ageHRP:e.target.value})} placeholder="Ex: 22"/>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <Input label="Téléphone" value={appForm.phoneRP} onChange={e=>setAppForm({...appForm,phoneRP:e.target.value})} placeholder="06..."/>
-                                    <Input label="Discord" value={appForm.discord} onChange={e=>setAppForm({...appForm,discord:e.target.value})} placeholder="user#1234"/>
-                                </div>
-                                <Input label="Disponibilités" value={appForm.availability} onChange={e=>setAppForm({...appForm,availability:e.target.value})} placeholder="Soirs, week-ends..."/>
-                                <Input label="Motivation" value={appForm.motivation} onChange={e=>setAppForm({...appForm,motivation:e.target.value})} placeholder="Pourquoi nous rejoindre ?" rows={3}/>
-                                <button onClick={handleSubmitApp} className="btn btn-primary w-full justify-center py-3"><Send size={16}/>Envoyer</button>
-                            </div>
-                        </>
-                    )}
-                </div>
-            </div>
             {toast && <Toast msg={toast.msg} type={toast.type}/>}
         </div>
     );
@@ -2282,7 +2281,7 @@ function HRTab({employees,applications,newEmployee,setNewEmployee,handleAddEmplo
 }
 
 // =============================================
-// SALARIES TAB
+// SALAIRES TAB
 // =============================================
 function SalairesTab({weekStats,grades,selectedDate,setSelectedDate,generatePaySlipPDF,theme,genExcelCSV,invoices,serviceLogs}){
     return (
