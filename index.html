@@ -905,7 +905,7 @@ function App() {
             setLoginError('');
             showToast(`Bienvenue, ${u.name.split(' ')[0]} !`);
         } else {
-            setLoginError('Identifiants incorrects. Compte admin par défaut : Admin / admin');
+            setLoginError('Identifiants incorrects.');
         }
     },[employees,loginForm,stayConnected,showToast]);
 
