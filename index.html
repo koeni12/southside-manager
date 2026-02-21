@@ -648,8 +648,9 @@ function App() {
     const [loading, setLoading] = useState(true);
 
     // ---- SERVICE ----
-    const [isServiceActive, setIsServiceActive] = useState(false);
-    const [serviceStartTime, setServiceStartTime] = useState(null);
+    // Fix Bug 3: Persistent state recovery
+    const [isServiceActive, setIsServiceActive] = useState(() => ls.get('bm_svc_active') === 'true');
+    const [serviceStartTime, setServiceStartTime] = useState(() => parseInt(ls.get('bm_svc_start')) || null);
     const [serviceTimer, setServiceTimer] = useState(0); // ms elapsed live
 
     // ---- DASHBOARD TARGET ----
@@ -675,7 +676,6 @@ function App() {
     // ---- EDITING ----
     const [editingInvoiceId, setEditingInvoiceId] = useState(null);
     const [editClientName, setEditClientName] = useState('');
-    const [isEditingPrices, setIsEditingPrices] = useState(false);
     const [isEditingMessages, setIsEditingMessages] = useState(false);
     const [confirmResetId, setConfirmResetId] = useState(null);
 
@@ -768,7 +768,16 @@ function App() {
         let unsubs = [];
         window._authReady.then(() => {
             unsubs = [
-                FS.listen('employees', d => { setEmployees(d); ls.set('bm_employees',d); }),
+                FS.listen('employees', d => { 
+                    setEmployees(d); 
+                    ls.set('bm_employees',d); 
+                    // Update current session user data in real-time (Fix Bug 4)
+                    setCurrentUser(prev => {
+                        if (!prev) return prev;
+                        const updated = d.find(e => e.id === prev.id);
+                        return updated || prev;
+                    });
+                }),
                 FS.listen('invoices', d => { setInvoices(d); ls.set('bm_invoices',d); }),
                 FS.listen('contracts', d => { setContracts(d); ls.set('bm_contracts',d); }),
                 FS.listen('applications', d => { setApplications(d); ls.set('bm_applications',d); }),
@@ -922,16 +931,25 @@ function App() {
             const log={id:`log_${Date.now()}`,employeeId:currentUser.id,startTime:serviceStartTime,endTime:end,duration:end-serviceStartTime,date:new Date().toISOString()};
             setServiceLogs(p=>[...p,log]);
             FS.upsert('serviceLogs', log);
+            
             setIsServiceActive(false); setServiceStartTime(null); setServiceTimer(0);
             ls.set('bm_svc_active','false');
             showToast('Fin de service enregistrée.');
+
+            // Fix Bug 2: Sync service status with Firestore so others see you offline
+            const updatedEmp = {...currentUser, isServiceActive: false};
+            FS.upsert('employees', updatedEmp);
         } else {
             const start=Date.now();
             setIsServiceActive(true); setServiceStartTime(start);
             ls.set('bm_svc_active','true'); ls.set('bm_svc_start',start);
             showToast('Prise de service ✅');
+
+            // Fix Bug 2: Sync service status with Firestore so others see you online
+            const updatedEmp = {...currentUser, isServiceActive: true};
+            FS.upsert('employees', updatedEmp);
         }
-    },[isServiceActive,serviceStartTime,currentUser,employees,showToast]);
+    },[isServiceActive,serviceStartTime,currentUser,showToast]);
 
     const handleCreateInvoice = useCallback(async()=>{
         if(!newInvoice.client||!newInvoice.type||!newInvoice.price){ showToast('Champs obligatoires manquants','error'); return; }
@@ -1002,8 +1020,7 @@ function App() {
     const handleSaveTheme = useCallback(async newT=>{
         setTheme(newT);
         FS.docSet('settings/theme', newT);
-        showToast('Thème sauvegardé !');
-    },[showToast]);
+    },[]);
 
     const handleSaveMessages = useCallback(async()=>{
         setIsEditingMessages(false);
@@ -1264,11 +1281,11 @@ function App() {
                         {activeTab==='tasks' && <TasksTab {...{tasks,newTask,setNewTask,handleAddTask,handleUpdateTask,handleDeleteTask,employees,currentUser,taskFilter,setTaskFilter,isBoss,theme}}/>}
                         {activeTab==='planning' && <PlanningTab {...{employees:sortedEmployees,serviceLogs,planDate,setPlanDate,theme}}/>}
                         {activeTab==='contracts' && <ContractsTab {...{contracts,newContract,setNewContract,handleSaveContract,handleDeleteContract,editingContract,setEditingContract,isBoss,theme}}/>}
-                        {activeTab==='tarifs' && <TarifsTab {...{config,handleSaveConfig,isEditingPrices,setIsEditingPrices,isBoss,theme}}/>}
+                        {activeTab==='tarifs' && <TarifsTab {...{config,handleSaveConfig,isBoss,theme}}/>}
                         {activeTab==='aide' && <AideTab {...{customMessages,setCustomMessages,isEditingMessages,setIsEditingMessages,handleSaveMessages,isBoss,theme}}/>}
                         {activeTab==='hr' && <HRTab {...{employees:sortedEmployees,applications,newEmployee,setNewEmployee,handleAddEmployee,handleAcceptApp,handleRejectApp,editingEmployee,setEditingEmployee,setModal,isBoss,grades,theme,handleViewEmpStats:emp=>{setDashTarget(emp);setActiveTab('personal');},sector,serviceLogs,weekStats}}/>}
                         {activeTab==='salaires' && <SalairesTab {...{weekStats,grades,selectedDate,setSelectedDate,generatePaySlipPDF:genPaySlipPDF,theme,genExcelCSV,invoices,serviceLogs}}/>}
-                        {activeTab==='settings' && <SettingsTab {...{theme,handleSaveTheme,config,handleSaveConfig,grades,handleSaveGrades,confirmResetId,setConfirmResetId,handleResetStats,customMessages,setCustomMessages,handleSaveMessages,isEditingMessages,setIsEditingMessages,sector}}/>}
+                        {activeTab==='settings' && <SettingsTab {...{theme,handleSaveTheme,config,handleSaveConfig,grades,handleSaveGrades,confirmResetId,setConfirmResetId,handleResetStats,customMessages,setCustomMessages,handleSaveMessages,isEditingMessages,setIsEditingMessages,sector,showToast}}/>}
                     </div>
                 </main>
             </div>
@@ -1426,7 +1443,7 @@ function DashboardTab({weekStats,selectedDate,setSelectedDate,theme,handleViewEm
                                 </RePieChart>
                             </ResponsiveContainer>
                         </div>
-                    ):<div style={{height:180}} className="flex items-center justify-center text-sm" style2={{color:'var(--text-dim)'}}>Aucune donnée</div>}
+                    ):<div style={{height:180, color:'var(--text-dim)'}} className="flex items-center justify-center text-sm">Aucune donnée</div>}
                     <div className="space-y-2 mt-2">
                         {weekStats.pieData.slice(0,4).map((d,i)=>(
                             <div key={i} className="flex items-center justify-between text-xs">
@@ -1522,7 +1539,7 @@ function PersonalTab({target,currentUser,weekStats,selectedDate,setSelectedDate,
                         <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{background:'rgba(59,130,246,0.15)',color:'#60a5fa'}}><Clock size={16}/></div>
                     </div>
                     <p className="text-2xl font-bold text-white mono">{fmtDuration(totalMs)}</p>
-                    {isSelf&&isServiceActive&&<p className="text-xs mt-1 text-emerald-400 flex items-center gap-1"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"/>En cours : +{fmtDuration(serviceTimer)}</p>}
+                    {isSelf&&isServiceActive&&<div className="text-xs mt-1 text-emerald-400 flex items-center gap-1"><div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"/>En cours : +{fmtDuration(serviceTimer)}</div>}
                 </div>
 
                 <div className="card p-5">
@@ -2077,20 +2094,34 @@ function ContractsTab({contracts,newContract,setNewContract,handleSaveContract,h
 }
 
 // =============================================
-// TARIFS TAB
+// TARIFS TAB (FIX BUG SAUTS DE CURSEURS)
 // =============================================
-function TarifsTab({config,handleSaveConfig,isEditingPrices,setIsEditingPrices,isBoss,theme}){
-    const prices=(config.priceList||[{category:'Prestations',items:[{name:'Service Standard',price:100},{name:'Service Premium',price:250}]}]);
-    const setPrices=newList=>handleSaveConfig({...config,priceList:newList});
+function TarifsTab({config,handleSaveConfig,isBoss,theme}){
+    const [isEditingPrices, setIsEditingPrices] = useState(false);
+    const defaultPrices = [{category:'Prestations',items:[{name:'Service Standard',price:100},{name:'Service Premium',price:250}]}];
+    
+    // Etat local pour éditer sans que Firestore n'efface pendant la frappe
+    const [localPrices, setLocalPrices] = useState(config.priceList || defaultPrices);
+
+    useEffect(() => {
+        if (!isEditingPrices) setLocalPrices(config.priceList || defaultPrices);
+    }, [config.priceList, isEditingPrices]);
+
+    const handleToggleEdit = () => {
+        if (isEditingPrices) {
+            handleSaveConfig({...config, priceList: localPrices});
+        }
+        setIsEditingPrices(!isEditingPrices);
+    };
 
     return (
         <div className="space-y-5 max-w-4xl">
             <div className="flex items-end justify-between">
                 <div><h2 className="section-title">Grille Tarifaire</h2><p className="section-sub">Tarifs officiels de l'entreprise</p></div>
-                {isBoss&&<button onClick={()=>setIsEditingPrices(!isEditingPrices)} className={`btn ${isEditingPrices?'btn-primary':'btn-ghost'}`}>{isEditingPrices?<><CheckCircle size={15}/>Terminer</>:<><Edit size={15}/>Modifier</>}</button>}
+                {isBoss&&<button onClick={handleToggleEdit} className={`btn ${isEditingPrices?'btn-primary':'btn-ghost'}`}>{isEditingPrices?<><CheckCircle size={15}/>Terminer</>:<><Edit size={15}/>Modifier</>}</button>}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {prices.map((cat,ci)=>(
+                {localPrices.map((cat,ci)=>(
                     <div key={ci} className="card overflow-hidden">
                         <div className="p-4 border-b" style={{borderColor:'var(--border)',background:'rgba(0,0,0,0.2)'}}>
                             <h3 className="font-bold text-white">{cat.category}</h3>
@@ -2100,16 +2131,16 @@ function TarifsTab({config,handleSaveConfig,isEditingPrices,setIsEditingPrices,i
                                 <div key={ii} className="p-4 flex justify-between items-center border-b" style={{borderColor:'rgba(255,255,255,0.03)'}}>
                                     {isEditingPrices?(
                                         <div className="flex items-center gap-2 w-full">
-                                            <input className="input-base py-1 text-sm flex-1" value={item.name} onChange={e=>{const n=[...prices];n[ci].items[ii].name=e.target.value;setPrices(n);}}/>
-                                            <input type="number" className="input-base py-1 text-sm w-20 text-right mono" value={item.price} onChange={e=>{const n=[...prices];n[ci].items[ii].price=parseFloat(e.target.value)||0;setPrices(n);}}/>
-                                            <button onClick={()=>{const n=[...prices];n[ci].items.splice(ii,1);setPrices(n);}} className="text-red-400 hover:text-red-300"><Trash2 size={14}/></button>
+                                            <input className="input-base py-1 text-sm flex-1" value={item.name} onChange={e=>{const n=[...localPrices];n[ci].items[ii].name=e.target.value;setLocalPrices(n);}}/>
+                                            <input type="number" className="input-base py-1 text-sm w-20 text-right mono" value={item.price} onChange={e=>{const n=[...localPrices];n[ci].items[ii].price=parseFloat(e.target.value)||0;setLocalPrices(n);}}/>
+                                            <button onClick={()=>{const n=[...localPrices];n[ci].items.splice(ii,1);setLocalPrices(n);}} className="text-red-400 hover:text-red-300"><Trash2 size={14}/></button>
                                         </div>
                                     ):(
                                         <><span className="text-sm" style={{color:'var(--text)'}}>{item.name}</span><span className="mono font-bold text-white">€ {fmtMoney(item.price)}</span></>
                                     )}
                                 </div>
                             ))}
-                            {isEditingPrices&&<button onClick={()=>{const n=[...prices];n[ci].items.push({name:'Nouvelle ligne',price:0});setPrices(n);}} className="w-full p-3 text-xs text-center transition-colors hover:text-white" style={{color:'var(--text-dim)',borderTop:'2px dashed rgba(255,255,255,0.06)'}}>+ Ajouter</button>}
+                            {isEditingPrices&&<button onClick={()=>{const n=[...localPrices];n[ci].items.push({name:'Nouvelle ligne',price:0});setLocalPrices(n);}} className="w-full p-3 text-xs text-center transition-colors hover:text-white" style={{color:'var(--text-dim)',borderTop:'2px dashed rgba(255,255,255,0.06)'}}>+ Ajouter</button>}
                         </div>
                     </div>
                 ))}
@@ -2355,22 +2386,49 @@ function SalairesTab({weekStats,grades,selectedDate,setSelectedDate,generatePayS
 }
 
 // =============================================
-// SETTINGS TAB
+// SETTINGS TAB (FIX BUG SAUTS DE CURSEURS)
 // =============================================
-function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handleSaveGrades,confirmResetId,setConfirmResetId,handleResetStats,customMessages,setCustomMessages,handleSaveMessages,isEditingMessages,setIsEditingMessages,sector}){
+function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handleSaveGrades,confirmResetId,setConfirmResetId,handleResetStats,customMessages,setCustomMessages,handleSaveMessages,isEditingMessages,setIsEditingMessages,sector,showToast}){
+    // Etat local pour accumuler les changements et ne pas interrompre la frappe de l'utilisateur
+    const [localTheme, setLocalTheme] = useState(theme);
+    const [localConfig, setLocalConfig] = useState(config);
+    const [localGrades, setLocalGrades] = useState(grades);
+    const [hasChanges, setHasChanges] = useState(false);
+
+    useEffect(() => { setLocalTheme(theme); }, [theme]);
+    useEffect(() => { setLocalConfig(config); }, [config]);
+    useEffect(() => { setLocalGrades(grades); }, [grades]);
+
+    const markChanged = () => setHasChanges(true);
+
+    const handleSaveAll = () => {
+        handleSaveTheme(localTheme);
+        handleSaveConfig(localConfig);
+        handleSaveGrades(localGrades);
+        setHasChanges(false);
+        showToast('Paramètres mis à jour !');
+    };
+
     return (
-        <div className="space-y-6 max-w-3xl">
-            <div><h2 className="section-title">Configuration</h2><p className="section-sub">Personnalisation & paramètres globaux</p></div>
+        <div className="space-y-6 max-w-3xl relative">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
+                <div><h2 className="section-title">Configuration</h2><p className="section-sub">Personnalisation & paramètres globaux</p></div>
+                {hasChanges && (
+                    <button onClick={handleSaveAll} className="btn btn-primary anim-in shadow-lg">
+                        <Save size={16}/> Sauvegarder les modifications
+                    </button>
+                )}
+            </div>
 
             {/* IDENTITY */}
             <div className="card p-5 space-y-5">
                 <h3 className="font-bold text-white flex items-center gap-2"><Palette size={16} style={{color:'var(--accent)'}}/>Identité de l'entreprise</h3>
-                <Input label="Nom de l'application" value={theme.appName} onChange={e=>handleSaveTheme({...theme,appName:e.target.value})}/>
+                <Input label="Nom de l'application" value={localTheme.appName} onChange={e=>{setLocalTheme({...localTheme,appName:e.target.value}); markChanged();}}/>
                 <div>
                     <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{color:'var(--text-dim)'}}>Secteur d'activité</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {BUSINESS_SECTORS.map(s=>(
-                            <button key={s.id} onClick={()=>handleSaveTheme({...theme,sector:s.id})} className={`p-3 rounded-xl border text-left transition-all text-sm ${theme.sector===s.id?'border-indigo-500 bg-indigo-500/10 text-white':'border-white/08 text-gray-400 hover:border-white/20'}`} style={{borderColor:theme.sector===s.id?'var(--accent)':undefined}}>
+                            <button key={s.id} onClick={()=>{setLocalTheme({...localTheme,sector:s.id}); markChanged();}} className={`p-3 rounded-xl border text-left transition-all text-sm ${localTheme.sector===s.id?'border-indigo-500 bg-indigo-500/10 text-white':'border-white/08 text-gray-400 hover:border-white/20'}`} style={{borderColor:localTheme.sector===s.id?'var(--accent)':undefined}}>
                                 <div className="text-xl mb-1">{s.icon}</div>
                                 <div className="font-medium text-xs">{s.label}</div>
                             </button>
@@ -2381,7 +2439,7 @@ function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handl
                     <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{color:'var(--text-dim)'}}>Couleur principale</p>
                     <div className="flex flex-wrap gap-2">
                         {THEME_COLORS.map(c=>(
-                            <button key={c.name} onClick={()=>handleSaveTheme({...theme,primaryColor:c.name,accentHex:c.hex})} className={`color-dot ${theme.primaryColor===c.name?'selected':''}`} style={{background:c.hex}} title={c.name}/>
+                            <button key={c.name} onClick={()=>{setLocalTheme({...localTheme,primaryColor:c.name,accentHex:c.hex}); markChanged();}} className={`color-dot ${localTheme.primaryColor===c.name?'selected':''}`} style={{background:c.hex}} title={c.name}/>
                         ))}
                     </div>
                 </div>
@@ -2389,7 +2447,7 @@ function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handl
                     <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{color:'var(--text-dim)'}}>Couleur secondaire</p>
                     <div className="flex flex-wrap gap-2">
                         {THEME_COLORS.map(c=>(
-                            <button key={c.name} onClick={()=>handleSaveTheme({...theme,secondaryColor:c.name})} className={`color-dot ${theme.secondaryColor===c.name?'selected':''}`} style={{background:c.hex}} title={c.name}/>
+                            <button key={c.name} onClick={()=>{setLocalTheme({...localTheme,secondaryColor:c.name}); markChanged();}} className={`color-dot ${localTheme.secondaryColor===c.name?'selected':''}`} style={{background:c.hex}} title={c.name}/>
                         ))}
                     </div>
                 </div>
@@ -2398,21 +2456,21 @@ function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handl
             {/* SERVICES */}
             <div className="card p-5 space-y-4">
                 <h3 className="font-bold text-white flex items-center gap-2"><Package size={16} className="text-emerald-400"/>Types de {sector.serviceLabel.toLowerCase()}s</h3>
-                {(config.services||[]).map((svc,i)=>(
+                {(localConfig.services||[]).map((svc,i)=>(
                     <div key={svc.id} className="flex items-center gap-3 p-3 rounded-xl" style={{background:'rgba(0,0,0,0.2)',border:'1px solid var(--border)'}}>
-                        <input className="input-base flex-1 py-2 text-sm" value={svc.name} onChange={e=>{const n=[...config.services];n[i].name=e.target.value;handleSaveConfig({...config,services:n});}}/>
+                        <input className="input-base flex-1 py-2 text-sm" value={svc.name} onChange={e=>{const n=[...localConfig.services];n[i].name=e.target.value;setLocalConfig({...localConfig,services:n}); markChanged();}}/>
                         <div className="relative w-28">
-                            <input type="number" className="input-base py-2 text-sm pr-6 mono" value={svc.costPercent} onChange={e=>{const n=[...config.services];n[i].costPercent=parseFloat(e.target.value)||0;handleSaveConfig({...config,services:n});}} placeholder="Coût%"/>
+                            <input type="number" className="input-base py-2 text-sm pr-6 mono" value={svc.costPercent} onChange={e=>{const n=[...localConfig.services];n[i].costPercent=parseFloat(e.target.value)||0;setLocalConfig({...localConfig,services:n}); markChanged();}} placeholder="Coût%"/>
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{color:'var(--text-dim)'}}>%</span>
                         </div>
                         <div className="relative w-28">
-                            <input type="number" className="input-base py-2 text-sm pr-6 mono" value={svc.bonusPercent??''} onChange={e=>{const n=[...config.services];n[i].bonusPercent=e.target.value===''?null:parseFloat(e.target.value);handleSaveConfig({...config,services:n});}} placeholder="Prime%"/>
+                            <input type="number" className="input-base py-2 text-sm pr-6 mono" value={svc.bonusPercent??''} onChange={e=>{const n=[...localConfig.services];n[i].bonusPercent=e.target.value===''?null:parseFloat(e.target.value);setLocalConfig({...localConfig,services:n}); markChanged();}} placeholder="Prime%"/>
                             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{color:'var(--text-dim)'}}>%</span>
                         </div>
-                        <button onClick={()=>handleSaveConfig({...config,services:config.services.filter((_,j)=>j!==i)})} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={15}/></button>
+                        <button onClick={()=>{setLocalConfig({...localConfig,services:localConfig.services.filter((_,j)=>j!==i)}); markChanged();}} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={15}/></button>
                     </div>
                 ))}
-                <button onClick={()=>handleSaveConfig({...config,services:[...(config.services||[]),{id:`srv_${Date.now()}`,name:`Nouveau ${sector.serviceLabel.toLowerCase()}`,costPercent:0,bonusPercent:null}]})} className="w-full py-2.5 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:text-white" style={{borderColor:'rgba(255,255,255,0.1)',color:'var(--text-dim)'}}>
+                <button onClick={()=>{setLocalConfig({...localConfig,services:[...(localConfig.services||[]),{id:`srv_${Date.now()}`,name:`Nouveau ${sector.serviceLabel.toLowerCase()}`,costPercent:0,bonusPercent:null}]}); markChanged();}} className="w-full py-2.5 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:text-white" style={{borderColor:'rgba(255,255,255,0.1)',color:'var(--text-dim)'}}>
                     <Plus size={15}/>Ajouter une catégorie
                 </button>
             </div>
@@ -2424,19 +2482,19 @@ function SettingsTab({theme,handleSaveTheme,config,handleSaveConfig,grades,handl
                     <table className="data-table">
                         <thead><tr><th>Grade</th><th className="text-center">Prime par défaut %</th><th className="text-center">Salaire max</th><th className="text-center">Suppr.</th></tr></thead>
                         <tbody>
-                            {grades.map(g=>(
+                            {localGrades.map(g=>(
                                 <tr key={g.id}>
-                                    <td><input className="input-base py-1.5 text-sm" value={g.name} onChange={e=>handleSaveGrades(grades.map(x=>x.id===g.id?{...x,name:e.target.value}:x))}/></td>
-                                    <td className="text-center"><input type="number" className="input-base py-1.5 text-sm w-16 text-center mono" value={g.primePercent} onChange={e=>handleSaveGrades(grades.map(x=>x.id===g.id?{...x,primePercent:parseFloat(e.target.value)||0}:x))}/></td>
-                                    <td className="text-center"><input type="number" className="input-base py-1.5 text-sm w-24 text-center mono" value={g.maxSalary} onChange={e=>handleSaveGrades(grades.map(x=>x.id===g.id?{...x,maxSalary:parseFloat(e.target.value)||0}:x))}/></td>
-                                    <td className="text-center"><button onClick={()=>{if(window.confirm('Supprimer?'))handleSaveGrades(grades.filter(x=>x.id!==g.id));}} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={14}/></button></td>
+                                    <td><input className="input-base py-1.5 text-sm" value={g.name} onChange={e=>{setLocalGrades(localGrades.map(x=>x.id===g.id?{...x,name:e.target.value}:x)); markChanged();}}/></td>
+                                    <td className="text-center"><input type="number" className="input-base py-1.5 text-sm w-16 text-center mono" value={g.primePercent} onChange={e=>{setLocalGrades(localGrades.map(x=>x.id===g.id?{...x,primePercent:parseFloat(e.target.value)||0}:x)); markChanged();}}/></td>
+                                    <td className="text-center"><input type="number" className="input-base py-1.5 text-sm w-24 text-center mono" value={g.maxSalary} onChange={e=>{setLocalGrades(localGrades.map(x=>x.id===g.id?{...x,maxSalary:parseFloat(e.target.value)||0}:x)); markChanged();}}/></td>
+                                    <td className="text-center"><button onClick={()=>{if(window.confirm('Supprimer?')){setLocalGrades(localGrades.filter(x=>x.id!==g.id)); markChanged();}}} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={14}/></button></td>
                                 </tr>
                             ))}
                         </tbody>
                     </table>
                 </div>
                 <div className="p-3 border-t" style={{borderColor:'var(--border)'}}>
-                    <button onClick={()=>handleSaveGrades([...grades,{id:`g_${Date.now()}`,name:'Nouveau grade',primePercent:0,maxSalary:0,order:grades.length}])} className="w-full py-2 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:text-white" style={{borderColor:'rgba(255,255,255,0.1)',color:'var(--text-dim)'}}><Plus size={14}/>Ajouter grade</button>
+                    <button onClick={()=>{setLocalGrades([...localGrades,{id:`g_${Date.now()}`,name:'Nouveau grade',primePercent:0,maxSalary:0,order:localGrades.length}]); markChanged();}} className="w-full py-2 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:text-white" style={{borderColor:'rgba(255,255,255,0.1)',color:'var(--text-dim)'}}><Plus size={14}/>Ajouter grade</button>
                 </div>
             </div>
 
@@ -2473,7 +2531,7 @@ function EmployeeModal({emp,setEmp,grades,handleSave,handleFire,currentUser,isBo
                     <Input label="Nom complet" value={emp.name} onChange={e=>setEmp({...emp,name:e.target.value})} readOnly={!isBoss}/>
                     <Input label="Date de naissance" type="date" value={emp.dob} onChange={e=>setEmp({...emp,dob:e.target.value})} readOnly={!isBoss}/>
                     <Select label="Grade" options={grades.map(g=>g.name)} value={emp.grade} onChange={e=>setEmp({...emp,grade:e.target.value})} readOnly={!isBoss}/>
-                    {isBoss&&<Select label="Rôle" options={[{value:'user',label:'Employé'},{value:'',label:''}]} value={emp.role} onChange={e=>setEmp({...emp,role:e.target.value})}/>}
+                    {isBoss&&<Select label="Rôle" options={[{value:'user',label:'Employé'},{value:'admin',label:'Admin'}]} value={emp.role} onChange={e=>setEmp({...emp,role:e.target.value})}/>}
                     <Input label="Lien contrat" type="url" value={emp.contractUrl} onChange={e=>setEmp({...emp,contractUrl:e.target.value})} prefix={FileText}/>
                     <Input label="IBAN" value={emp.iban} onChange={e=>setEmp({...emp,iban:e.target.value})} prefix={CreditCard}/>
                     {isBoss&&<Input label="Mot de passe" value={emp.password} onChange={e=>setEmp({...emp,password:e.target.value})} prefix={Lock}/>}
