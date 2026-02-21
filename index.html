@@ -1099,7 +1099,6 @@
 
         // Local Storage helpers
         const ls = { get: (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { } } };
-        const ss = { get: (k, d) => { try { const v = sessionStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } }, set: (k, v) => { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch { } } };
 
         // =============================================
         // INITIAL DATA
@@ -1298,10 +1297,6 @@
             // ---- DATA ----
             const [theme, setTheme] = useState(INIT_THEME);
             const [config, setConfig] = useState(INIT_CONFIG);
-
-            useEffect(() => {
-                document.title = `${theme?.appName || 'Business Manager Pro'} — Intranet`;
-            }, [theme?.appName]);
             const [grades, setGrades] = useState(INIT_GRADES);
             const [employees, setEmployees] = useState([]);
             const [invoices, setInvoices] = useState([]);
@@ -1323,8 +1318,8 @@
 
             // ---- SERVICE ----
             // Fix Bug 3: Persistent state recovery
-            const [isServiceActive, setIsServiceActive] = useState(() => ss.get('bm_svc_active') === 'true');
-            const [serviceStartTime, setServiceStartTime] = useState(() => parseInt(ss.get('bm_svc_start')) || null);
+            const [isServiceActive, setIsServiceActive] = useState(() => sessionStorage.getItem('bm_svc_active') === 'true');
+            const [serviceStartTime, setServiceStartTime] = useState(() => parseInt(sessionStorage.getItem('bm_svc_start')) || null);
             const [serviceTimer, setServiceTimer] = useState(0); // ms elapsed live
 
             // ---- DASHBOARD TARGET ----
@@ -1334,7 +1329,7 @@
             const [newInvoice, setNewInvoice] = useState({ client: '', type: '', price: '' });
             const [newEmployee, setNewEmployee] = useState({ name: '', grade: '', dob: '', contractUrl: '', iban: '', role: 'user', password: '1234' });
             const [newContract, setNewContract] = useState({ company: '', date: '', endDate: '', value: '', description: '', url: '', supplementaryDocs: [] });
-            const [appForm, setAppForm] = useState({ firstName: '', lastName: '', phone: '', email: '', address: '', position: '', experience: '', cvLink: '' });
+            const [appForm, setAppForm] = useState({ name: '', dob: '', ageHRP: '', phoneRP: '', discord: '', availability: '', motivation: '' });
             const [editingEmployee, setEditingEmployee] = useState(null);
             const [editingContract, setEditingContract] = useState(null);
             const [newTask, setNewTask] = useState({ title: '', desc: '', assignee: '', priority: 'medium', status: 'todo' });
@@ -1368,7 +1363,9 @@
                 }
                 const c2 = THEME_COLORS.find(c => c.name === theme.secondaryColor);
                 if (c2) document.documentElement.style.setProperty('--accent2', c2.hex);
-            }, [theme.primaryColor, theme.secondaryColor]);
+                // Feature 6: Dynamic document title
+                document.title = theme.appName || 'Business Manager';
+            }, [theme.primaryColor, theme.secondaryColor, theme.appName]);
 
 
 
@@ -1485,7 +1482,7 @@
             // Heartbeat
             useEffect(() => {
                 if (!isServiceActive) return;
-                const t = setInterval(() => ss.set('bm_svc_hb', Date.now()), 5000);
+                const t = setInterval(() => sessionStorage.setItem('bm_svc_hb', Date.now()), 5000);
                 return () => clearInterval(t);
             }, [isServiceActive]);
 
@@ -1607,7 +1604,7 @@
                     FS.upsert('serviceLogs', log);
 
                     setIsServiceActive(false); setServiceStartTime(null); setServiceTimer(0);
-                    ss.set('bm_svc_active', 'false');
+                    sessionStorage.setItem('bm_svc_active', 'false');
                     showToast('Fin de service enregistrée.');
 
                     // Fix Bug 2: Sync service status with Firestore so others see you offline
@@ -1616,7 +1613,7 @@
                 } else {
                     const start = Date.now();
                     setIsServiceActive(true); setServiceStartTime(start);
-                    ss.set('bm_svc_active', 'true'); ss.set('bm_svc_start', start);
+                    sessionStorage.setItem('bm_svc_active', 'true'); sessionStorage.setItem('bm_svc_start', String(start));
                     showToast('Prise de service ✅');
 
                     // Fix Bug 2: Sync service status with Firestore so others see you online
@@ -1657,6 +1654,22 @@
                 setEditingInvoiceId(null); setEditClientName('');
                 showToast('Nom modifié.');
             }, [editClientName, invoices, showToast]);
+
+            const handleFullEditInvoice = useCallback(async (id, newType, newPrice) => {
+                const price = parseFloat(newPrice) || 0;
+                const m = calcMetrics(newType, price);
+                const inv = invoices.find(i => i.id === id);
+                if (!inv) return;
+                const emp = employees.find(e => e.id === inv.employeeId);
+                const grd = grades.find(g => g.name === emp?.grade);
+                const svc = (config.services || []).find(s => s.name === newType);
+                const bonusRate = svc?.bonusPercent != null ? svc.bonusPercent : (grd?.primePercent || 0);
+                const bonus = (config.primesEnabled !== false && m.profit > 0) ? m.profit * bonusRate / 100 : 0;
+                const updated = { ...inv, type: newType, price, profit: m.profit, bonus };
+                setInvoices(p => p.map(i => i.id === id ? updated : i));
+                FS.upsert('invoices', updated);
+                showToast('Facture mise à jour !');
+            }, [invoices, employees, grades, config, calcMetrics, showToast]);
 
             const handleAddEmployee = useCallback(async () => {
                 if (!newEmployee.name || !newEmployee.grade) { showToast('Nom et grade requis.', 'error'); return; }
@@ -1726,14 +1739,13 @@
 
             const handleAcceptApp = useCallback(async app => {
                 const id = `e${Date.now()}`;
-                const fullName = `${app.firstName} ${app.lastName}`;
-                const emp = { id, name: fullName, grade: grades[grades.length - 1]?.name || 'Junior', role: 'user', password: '1234', dob: '', contractUrl: '', iban: '', isServiceActive: false };
+                const emp = { id, name: app.name, grade: grades[grades.length - 1]?.name || 'Junior', role: 'user', password: '1234', dob: app.dob, contractUrl: '', iban: '', isServiceActive: false };
                 setEmployees(p => [...p, emp]);
                 FS.upsert('employees', emp);
                 setApplications(p => p.filter(a => a.id !== app.id));
                 FS.del('applications', app.id);
-                showToast(`${fullName} recruté !`);
-                addAppNotif(`Nouvelle recrue : ${fullName}`);
+                showToast(`${app.name} recruté !`);
+                addAppNotif(`Nouvelle recrue : ${app.name}`);
             }, [grades, showToast, addAppNotif]);
 
             const handleRejectApp = useCallback(async id => {
@@ -1743,11 +1755,11 @@
             }, [applications, showToast]);
 
             const handleSubmitApp = useCallback(async () => {
-                if (!appForm.firstName || !appForm.lastName || !appForm.position) { showToast('Prénom, nom et poste requis.', 'error'); return; }
-                const a = { ...appForm, internalNotes: '', id: `app${Date.now()}`, date: new Date().toISOString() };
+                if (!appForm.name) { showToast('Nom requis.', 'error'); return; }
+                const a = { ...appForm, id: `app${Date.now()}`, date: new Date().toISOString() };
                 setApplications(p => [...p, a]);
                 FS.upsert('applications', a);
-                setAppForm({ firstName: '', lastName: '', phone: '', email: '', address: '', position: '', experience: '', cvLink: '' });
+                setAppForm({ name: '', dob: '', ageHRP: '', phoneRP: '', discord: '', availability: '', motivation: '' });
                 setAuthMode('login');
                 showToast('Candidature envoyée !');
             }, [appForm, showToast]);
@@ -1948,11 +1960,11 @@
                         {/* Content */}
                         <main className="flex-1 overflow-y-auto p-6" style={{ scrollbarWidth: 'thin' }}>
                             <div className="anim-in" key={activeTab}>
-                                {activeTab === 'dashboard' && <DashboardTab {...{ weekStats, selectedDate, setSelectedDate, theme, handleViewEmpStats: emp => { setDashTarget(emp); setActiveTab('personal'); }, sector, invoices, config }} />}
-                                {activeTab === 'personal' && <PersonalTab {...{ target: dashTarget || currentUser, currentUser, weekStats, selectedDate, setSelectedDate, getPersonalStats, isServiceActive, serviceTimer, serviceStartTime, isBoss, theme, grades, serviceLogs, sector, config }} />}
+                                {activeTab === 'dashboard' && <DashboardTab {...{ weekStats, selectedDate, setSelectedDate, theme, handleViewEmpStats: emp => { setDashTarget(emp); setActiveTab('personal'); }, sector, invoices }} />}
+                                {activeTab === 'personal' && <PersonalTab {...{ target: dashTarget || currentUser, currentUser, weekStats, selectedDate, setSelectedDate, getPersonalStats, isServiceActive, serviceTimer, serviceStartTime, isBoss, theme, grades, serviceLogs, sector }} />}
                                 {activeTab === 'facture' && <InvoiceTab {...{ newInvoice, setNewInvoice, handleCreateInvoice, config, calcMetrics, uniqueClients, theme, sector }} />}
-                                {activeTab === 'historique' && <HistoryTab {...{ invoices, weekStats, selectedDate, setSelectedDate, histSearch, setHistSearch, histFilter, setHistFilter, handleDeleteInvoice, isBoss, currentUser, config, editingInvoiceId, setEditingInvoiceId, editClientName, setEditClientName, handleUpdateInvoiceClient, theme, sector, genInvoicePDF: inv => genInvoicePDF(inv, theme), genExcelCSV }} />}
-                                {activeTab === 'clients' && <ClientsTab {...{ clientStats, invoices, clientSearch, setClientSearch, selectedClient, setSelectedClient, handleRenameClient, isBoss, theme, genInvoicePDF: inv => genInvoicePDF(inv, theme) }} />}
+                                {activeTab === 'historique' && <HistoryTab {...{ invoices, weekStats, selectedDate, setSelectedDate, histSearch, setHistSearch, histFilter, setHistFilter, handleDeleteInvoice, handleFullEditInvoice, isBoss, currentUser, config, editingInvoiceId, setEditingInvoiceId, editClientName, setEditClientName, handleUpdateInvoiceClient, theme, sector, genInvoicePDF, genExcelCSV }} />}
+                                {activeTab === 'clients' && <ClientsTab {...{ clientStats, invoices, clientSearch, setClientSearch, selectedClient, setSelectedClient, handleRenameClient, isBoss, theme, genInvoicePDF }} />}
                                 {activeTab === 'tasks' && <TasksTab {...{ tasks, newTask, setNewTask, handleAddTask, handleUpdateTask, handleDeleteTask, employees, currentUser, taskFilter, setTaskFilter, isBoss, theme }} />}
                                 {activeTab === 'planning' && <PlanningTab {...{ employees: sortedEmployees, serviceLogs, planDate, setPlanDate, theme }} />}
                                 {activeTab === 'contracts' && <ContractsTab {...{ contracts, newContract, setNewContract, handleSaveContract, handleDeleteContract, editingContract, setEditingContract, isBoss, theme }} />}
@@ -2043,20 +2055,17 @@
                                     </button>
                                     <h2 className="font-display text-lg font-bold text-white mb-5">Candidature</h2>
                                     <div className="space-y-4">
+                                        <Input label="Nom complet *" value={appForm.name} onChange={e => setAppForm({ ...appForm, name: e.target.value })} placeholder="Prénom Nom" />
                                         <div className="grid grid-cols-2 gap-3">
-                                            <Input label="Prénom *" value={appForm.firstName} onChange={e => setAppForm({ ...appForm, firstName: e.target.value })} placeholder="Prénom" />
-                                            <Input label="Nom *" value={appForm.lastName} onChange={e => setAppForm({ ...appForm, lastName: e.target.value })} placeholder="Nom" />
+                                            <Input label="Date naissance" type="date" value={appForm.dob} onChange={e => setAppForm({ ...appForm, dob: e.target.value })} />
+                                            <Input label="Age réel" type="number" value={appForm.ageHRP} onChange={e => setAppForm({ ...appForm, ageHRP: e.target.value })} placeholder="Ex: 22" />
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
-                                            <Input label="Téléphone" value={appForm.phone} onChange={e => setAppForm({ ...appForm, phone: e.target.value })} placeholder="06..." />
-                                            <Input label="Email" type="email" value={appForm.email} onChange={e => setAppForm({ ...appForm, email: e.target.value })} placeholder="email@ext.com" />
+                                            <Input label="Téléphone" value={appForm.phoneRP} onChange={e => setAppForm({ ...appForm, phoneRP: e.target.value })} placeholder="06..." />
+                                            <Input label="Discord" value={appForm.discord} onChange={e => setAppForm({ ...appForm, discord: e.target.value })} placeholder="user#1234" />
                                         </div>
-                                        <Input label="Adresse" value={appForm.address} onChange={e => setAppForm({ ...appForm, address: e.target.value })} placeholder="Adresse complète" />
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <Input label="Poste demandé *" value={appForm.position} onChange={e => setAppForm({ ...appForm, position: e.target.value })} placeholder="Ex: Mécanicien" />
-                                            <Input label="Lien CV" value={appForm.cvLink} onChange={e => setAppForm({ ...appForm, cvLink: e.target.value })} placeholder="https://..." />
-                                        </div>
-                                        <Input label="Expérience" value={appForm.experience} onChange={e => setAppForm({ ...appForm, experience: e.target.value })} placeholder="Vos expériences..." rows={2} />
+                                        <Input label="Disponibilités" value={appForm.availability} onChange={e => setAppForm({ ...appForm, availability: e.target.value })} placeholder="Soirs, week-ends..." />
+                                        <Input label="Motivation" value={appForm.motivation} onChange={e => setAppForm({ ...appForm, motivation: e.target.value })} placeholder="Pourquoi nous rejoindre ?" rows={3} />
                                         <button onClick={handleSubmitApp} className="btn btn-primary w-full justify-center py-3"><Send size={16} />Envoyer</button>
                                     </div>
                                 </>
@@ -2071,7 +2080,7 @@
         // =============================================
         // DASHBOARD TAB
         // =============================================
-        function DashboardTab({ weekStats, selectedDate, setSelectedDate, theme, handleViewEmpStats, sector, invoices, config }) {
+        function DashboardTab({ weekStats, selectedDate, setSelectedDate, theme, handleViewEmpStats, sector, invoices }) {
             const COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444'];
             const allTimeRevenue = invoices.reduce((a, c) => a + c.price, 0);
             const allTimeProfit = invoices.reduce((a, c) => a + (c.profit || 0), 0);
@@ -2086,7 +2095,7 @@
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <StatCard label="Chiffre d'affaires" value={weekStats.totalRevenue} prefix="€ " icon={TrendingUp} color="indigo" trend={weekStats.revTrend} />
                         <StatCard label="Bénéfice net" value={weekStats.totalProfit} prefix="€ " icon={Wallet} color="green" />
-                        {config?.primesEnabled !== false && <StatCard label="Total primes" value={weekStats.totalBonus} prefix="€ " icon={Award} color="purple" />}
+                        <StatCard label="Total primes" value={weekStats.totalBonus} prefix="€ " icon={Award} color="purple" />
                         <StatCard label="Factures émises" value={weekStats.wInv.length} icon={FileText} color="amber" mono={false} />
                     </div>
 
@@ -2193,7 +2202,7 @@
         // =============================================
         // PERSONAL TAB
         // =============================================
-        function PersonalTab({ target, currentUser, weekStats, selectedDate, setSelectedDate, getPersonalStats, isServiceActive, serviceTimer, serviceStartTime, isBoss, theme, grades, serviceLogs, sector, config }) {
+        function PersonalTab({ target, currentUser, weekStats, selectedDate, setSelectedDate, getPersonalStats, isServiceActive, serviceTimer, serviceStartTime, isBoss, theme, grades, serviceLogs, sector }) {
             const isSelf = target?.id === currentUser?.id;
             const ps = getPersonalStats(target);
             const { myInv, revenue, profit, bonusT, maxSalary, targetProfit, progress, isComplete, earnedSalary, totalMs } = ps;
@@ -2238,17 +2247,15 @@
                             <p className="text-xs mt-1" style={{ color: 'var(--text-dim)' }}>{myInv.length} {sector.invoiceLabel.toLowerCase()}(s)</p>
                         </div>
 
-                        <div className={`card p-5 border-l-2 ${config?.primesEnabled !== false ? (isComplete ? 'border-l-emerald-500' : 'border-l-amber-500') : 'border-l-indigo-500'}`}>
+                        <div className={`card p-5 border-l-2 ${isComplete ? 'border-l-emerald-500' : 'border-l-amber-500'}`}>
                             <div className="flex justify-between items-start mb-3">
                                 <p className="text-xs font-bold uppercase tracking-widest" style={{ color: 'var(--text-dim)' }}>Paie estimée</p>
-                                {config?.primesEnabled !== false && <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isComplete ? 'text-emerald-400' : 'text-amber-400'}`} style={{ background: isComplete ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)' }}>{isComplete ? <Unlock size={16} /> : <Lock size={16} />}</div>}
+                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isComplete ? 'text-emerald-400' : 'text-amber-400'}`} style={{ background: isComplete ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)' }}>{isComplete ? <Unlock size={16} /> : <Lock size={16} />}</div>
                             </div>
-                            <p className="text-2xl font-bold text-white">€ {fmtMoney(earnedSalary + (config?.primesEnabled !== false && isComplete ? bonusT : 0))}</p>
-                            {config?.primesEnabled !== false && (
-                                <div className={`text-xs mt-2 flex items-center gap-1 ${isComplete ? 'text-emerald-400' : 'text-amber-500'}`}>
-                                    {isComplete ? <><CheckCircle size={11} />Prime € {fmtMoney(bonusT)} débloquée</> : <><Lock size={11} />Prime € {fmtMoney(bonusT)} bloquée</>}
-                                </div>
-                            )}
+                            <p className="text-2xl font-bold text-white">€ {fmtMoney(earnedSalary + (isComplete ? bonusT : 0))}</p>
+                            <div className={`text-xs mt-2 flex items-center gap-1 ${isComplete ? 'text-emerald-400' : 'text-amber-500'}`}>
+                                {isComplete ? <><CheckCircle size={11} />Prime € {fmtMoney(bonusT)} débloquée</> : <><Lock size={11} />Prime € {fmtMoney(bonusT)} bloquée</>}
+                            </div>
                         </div>
                     </div>
 
@@ -2259,7 +2266,7 @@
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="data-table">
-                                    <thead><tr><th>Date</th><th>Client</th><th>Type</th><th className="text-right">Prix</th>{config?.primesEnabled !== false && <th className="text-right">Prime</th>}</tr></thead>
+                                    <thead><tr><th>Date</th><th>Client</th><th>Type</th><th className="text-right">Prix</th><th className="text-right">Prime</th></tr></thead>
                                     <tbody>
                                         {myInv.map(inv => (
                                             <tr key={inv.id}>
@@ -2267,7 +2274,7 @@
                                                 <td className="font-medium text-white">{inv.client}</td>
                                                 <td><Badge color="gray">{inv.type}</Badge></td>
                                                 <td className="text-right mono font-bold text-white">€ {fmtMoney(inv.price)}</td>
-                                                {config?.primesEnabled !== false && <td className="text-right mono text-emerald-400 font-bold">+€ {fmtMoney(inv.bonus)}</td>}
+                                                <td className="text-right mono text-emerald-400 font-bold">+€ {fmtMoney(inv.bonus)}</td>
                                             </tr>
                                         ))}
                                         {myInv.length === 0 && <tr><td colSpan={5} className="text-center py-8 text-sm" style={{ color: 'var(--text-dim)' }}>Aucune facture cette semaine.</td></tr>}
@@ -2297,32 +2304,8 @@
         // INVOICE TAB
         // =============================================
         function InvoiceTab({ newInvoice, setNewInvoice, handleCreateInvoice, config, calcMetrics, uniqueClients, theme, sector }) {
-            const [selectedGrille, setSelectedGrille] = useState('');
             const m = calcMetrics(newInvoice.type, newInvoice.price);
             const price = parseFloat(newInvoice.price) || 0;
-
-            const handleGrilleChange = (e) => {
-                setSelectedGrille(e.target.value);
-            };
-
-            const handleTypeChange = (e) => {
-                const t = e.target.value;
-                let newPrice = newInvoice.price;
-                if (selectedGrille) {
-                    const grille = (config.priceList || []).find(c => c.category === selectedGrille);
-                    if (grille) {
-                        const item = grille.items.find(i => i.name === t);
-                        if (item) newPrice = item.price.toString();
-                    }
-                }
-                setNewInvoice({ ...newInvoice, type: t, price: newPrice });
-            };
-
-            // Options: either the items of the selected Grille, or all global services
-            const serviceOptions = selectedGrille
-                ? ((config.priceList || []).find(c => c.category === selectedGrille)?.items.map(i => i.name) || [])
-                : ((config.services || []).map(s => s.name));
-
             return (
                 <div className="max-w-2xl mx-auto space-y-6">
                     <div><h2 className="section-title">Nouvelle {sector.invoiceLabel}</h2><p className="section-sub">Enregistrement rapide · Calcul automatique</p></div>
@@ -2331,10 +2314,7 @@
                             <Input label={`Client / ${sector.invoiceLabel}`} required value={newInvoice.client} onChange={e => setNewInvoice({ ...newInvoice, client: e.target.value })} placeholder="Nom du client ou entreprise" list="cl-list" prefix={User} />
                             <datalist id="cl-list">{uniqueClients.map((c, i) => <option key={i} value={c} />)}</datalist>
                         </div>
-                        {(config.priceList && config.priceList.length > 0) && (
-                            <Select label="Grille tarifaire (Optionnel)" options={(config.priceList || []).map(c => c.category)} value={selectedGrille} onChange={handleGrilleChange} />
-                        )}
-                        <Select label="Type de prestation *" required options={serviceOptions} value={newInvoice.type} onChange={handleTypeChange} />
+                        <Select label="Type de prestation *" required options={(config.services || []).map(s => s.name)} value={newInvoice.type} onChange={e => setNewInvoice({ ...newInvoice, type: e.target.value })} />
                         <Input label="Montant (€) *" required type="number" prefix={DollarSign} placeholder="0.00" value={newInvoice.price} onChange={e => setNewInvoice({ ...newInvoice, price: e.target.value })} />
 
                         {price > 0 && (
@@ -2362,7 +2342,15 @@
         // =============================================
         // HISTORY TAB
         // =============================================
-        function HistoryTab({ invoices, weekStats, selectedDate, setSelectedDate, histSearch, setHistSearch, histFilter, setHistFilter, handleDeleteInvoice, isBoss, currentUser, config, editingInvoiceId, setEditingInvoiceId, editClientName, setEditClientName, handleUpdateInvoiceClient, theme, sector, genInvoicePDF, genExcelCSV }) {
+        function HistoryTab({ invoices, weekStats, selectedDate, setSelectedDate, histSearch, setHistSearch, histFilter, setHistFilter, handleDeleteInvoice, handleFullEditInvoice, isBoss, currentUser, config, editingInvoiceId, setEditingInvoiceId, editClientName, setEditClientName, handleUpdateInvoiceClient, theme, sector, genInvoicePDF, genExcelCSV }) {
+            const [editFullId, setEditFullId] = useState(null);
+            const [editPrice, setEditPrice] = useState('');
+            const [editType, setEditType] = useState('');
+
+            const startFullEdit = (inv) => { setEditFullId(inv.id); setEditPrice(inv.price); setEditType(inv.type); };
+            const cancelFullEdit = () => { setEditFullId(null); setEditPrice(''); setEditType(''); };
+            const saveFullEdit = () => { handleFullEditInvoice(editFullId, editType, editPrice); cancelFullEdit(); };
+
             const filtered = weekStats.wInv.filter(inv => {
                 const ms = inv.client?.toLowerCase().includes(histSearch.toLowerCase()) || inv.employeeName?.toLowerCase().includes(histSearch.toLowerCase());
                 const mf = histFilter ? inv.type === histFilter : true;
@@ -2415,14 +2403,34 @@
                                                     </div>
                                                 )}
                                             </td>
-                                            <td><Badge color="gray">{inv.type}</Badge></td>
-                                            <td className="text-right mono font-bold text-white">€ {fmtMoney(inv.price)}</td>
+                                            <td>
+                                                {editFullId === inv.id ? (
+                                                    <select className="input-base py-1 text-sm" value={editType} onChange={e => setEditType(e.target.value)}>
+                                                        {(config.services || []).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                                                    </select>
+                                                ) : <Badge color="gray">{inv.type}</Badge>}
+                                            </td>
+                                            <td className="text-right">
+                                                {editFullId === inv.id ? (
+                                                    <input type="number" className="input-base py-1 text-sm w-24 text-right mono" value={editPrice} onChange={e => setEditPrice(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') saveFullEdit(); if (e.key === 'Escape') cancelFullEdit(); }} />
+                                                ) : <span className="mono font-bold text-white">€ {fmtMoney(inv.price)}</span>}
+                                            </td>
                                             {isBoss && <td className={`text-right mono font-bold ${(inv.profit || 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>€ {fmtMoney(inv.profit)}</td>}
                                             <td className="text-sm" style={{ color: 'var(--text-dim)' }}>{inv.employeeName}</td>
                                             <td>
                                                 <div className="flex items-center justify-center gap-1">
-                                                    <button onClick={() => genInvoicePDF(inv, {})} className="btn btn-ghost py-1 px-2 text-xs"><Download size={13} /></button>
-                                                    {isBoss && <button onClick={() => handleDeleteInvoice(inv.id)} className="btn btn-danger py-1 px-2 text-xs"><Trash2 size={13} /></button>}
+                                                    {editFullId === inv.id ? (
+                                                        <>
+                                                            <button onClick={saveFullEdit} className="btn btn-success py-1 px-2 text-xs" title="Sauvegarder"><CheckCircle size={13} /></button>
+                                                            <button onClick={cancelFullEdit} className="btn btn-ghost py-1 px-2 text-xs" title="Annuler"><XCircle size={13} /></button>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            {(isBoss || inv.employeeId === currentUser?.id) && <button onClick={() => startFullEdit(inv)} className="btn btn-ghost py-1 px-2 text-xs" title="Modifier la facture"><Edit size={13} /></button>}
+                                                            <button onClick={() => genInvoicePDF(inv, {})} className="btn btn-ghost py-1 px-2 text-xs"><Download size={13} /></button>
+                                                            {isBoss && <button onClick={() => handleDeleteInvoice(inv.id)} className="btn btn-danger py-1 px-2 text-xs"><Trash2 size={13} /></button>}
+                                                        </>
+                                                    )}
                                                 </div>
                                             </td>
                                         </tr>
@@ -2829,16 +2837,12 @@
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {localPrices.map((cat, ci) => (
-                            <div key={ci} className="card overflow-hidden flex-col flex">
-                                <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: 'var(--border)', background: 'rgba(0,0,0,0.2)' }}>
-                                    {isEditingPrices ? (
-                                        <input className="input-base py-1 font-bold text-white w-full mr-2" value={cat.category} onChange={e => { const n = [...localPrices]; n[ci].category = e.target.value; setLocalPrices(n); }} />
-                                    ) : (
-                                        <h3 className="font-bold text-white">{cat.category}</h3>
-                                    )}
-                                    {isEditingPrices && <button onClick={() => { if (window.confirm('Supprimer cette grille ?')) { const n = [...localPrices]; n.splice(ci, 1); setLocalPrices(n); } }} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={15} /></button>}
+                            <div key={ci} className="card overflow-hidden">
+                                <div className="p-4 border-b flex items-center justify-between gap-2" style={{ borderColor: 'var(--border)', background: 'rgba(0,0,0,0.2)' }}>
+                                    {isEditingPrices ? <input className="input-base py-1 text-sm font-bold flex-1" value={cat.category} onChange={e => { const n = [...localPrices]; n[ci].category = e.target.value; setLocalPrices(n); }} /> : <h3 className="font-bold text-white">{cat.category}</h3>}
+                                    {isEditingPrices && <button onClick={() => { if (window.confirm(`Supprimer la grille "${cat.category}" ?`)) { setLocalPrices(localPrices.filter((_, i) => i !== ci)); } }} className="text-red-400 hover:text-red-300 p-1 flex-shrink-0" title="Supprimer cette grille"><Trash2 size={15} /></button>}
                                 </div>
-                                <div className="flex-1">
+                                <div>
                                     {cat.items.map((item, ii) => (
                                         <div key={ii} className="p-4 flex justify-between items-center border-b" style={{ borderColor: 'rgba(255,255,255,0.03)' }}>
                                             {isEditingPrices ? (
@@ -2852,16 +2856,12 @@
                                             )}
                                         </div>
                                     ))}
-                                    {isEditingPrices && <button onClick={() => { const n = [...localPrices]; n[ci].items.push({ name: 'Nouvelle ligne', price: 0 }); setLocalPrices(n); }} className="w-full p-3 text-xs text-center transition-colors hover:text-white" style={{ color: 'var(--text-dim)', borderTop: '2px dashed rgba(255,255,255,0.06)' }}>+ Ajouter une prestation</button>}
+                                    {isEditingPrices && <button onClick={() => { const n = [...localPrices]; n[ci].items.push({ name: 'Nouvelle ligne', price: 0 }); setLocalPrices(n); }} className="w-full p-3 text-xs text-center transition-colors hover:text-white" style={{ color: 'var(--text-dim)', borderTop: '2px dashed rgba(255,255,255,0.06)' }}>+ Ajouter</button>}
                                 </div>
                             </div>
                         ))}
+                        {isEditingPrices && <button onClick={() => { setLocalPrices([...localPrices, { category: 'Nouvelle grille', items: [{ name: 'Service', price: 0 }] }]); }} className="card p-6 flex items-center justify-center gap-2 text-sm font-semibold transition-colors hover:text-white" style={{ color: 'var(--text-dim)', border: '2px dashed rgba(255,255,255,0.1)' }}><Plus size={15} />Ajouter une grille</button>}
                     </div>
-                    {isEditingPrices && (
-                        <button onClick={() => setLocalPrices([...localPrices, { category: 'Nouvelle grille', items: [] }])} className="w-full py-3 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:text-white mt-4" style={{ borderColor: 'rgba(255,255,255,0.1)', color: 'var(--text-dim)' }}>
-                            <Plus size={15} /> Ajouter une grille tarifaire
-                        </button>
-                    )}
                 </div>
             );
         }
@@ -2920,6 +2920,7 @@
         // =============================================
         function HRTab({ employees, applications, newEmployee, setNewEmployee, handleAddEmployee, handleAcceptApp, handleRejectApp, editingEmployee, setEditingEmployee, setModal, isBoss, grades, theme, handleViewEmpStats, sector, serviceLogs, weekStats }) {
             const missingContracts = employees.filter(e => !e.contractUrl).length;
+            const [showApps, setShowApps] = useState(false);
 
             return (
                 <div className="space-y-6 max-w-6xl">
@@ -2930,50 +2931,36 @@
 
                     {/* Applications */}
                     {isBoss && applications.length > 0 && (
-                        <div className="card overflow-hidden mt-6" style={{ borderColor: 'rgba(99,102,241,0.2)' }}>
-                            <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: 'var(--border)' }}>
-                                <h3 className="font-bold text-white flex items-center gap-2"><Inbox size={16} style={{ color: 'var(--accent)' }} />Candidatures ({applications.length})</h3>
-                            </div>
-                            <div className="overflow-x-auto">
-                                <table className="data-table" style={{ minWidth: '1200px' }}>
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Candidat</th>
-                                            <th>Contact</th>
-                                            <th>Adresse</th>
-                                            <th>Poste demandé</th>
-                                            <th>Expérience</th>
-                                            <th>CV</th>
-                                            <th>Notes</th>
-                                            <th className="text-center">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {[...applications].sort((a, b) => new Date(a.date) - new Date(b.date)).map(app => (
-                                            <tr key={app.id}>
-                                                <td className="text-xs" style={{ color: 'var(--text-dim)' }}>{fmtDate(app.date)}</td>
-                                                <td className="font-bold text-white">{app.lastName?.toUpperCase()} {app.firstName}</td>
-                                                <td className="text-xs" style={{ color: 'var(--text-dim)' }}>
-                                                    {app.phone && <div>📞 {app.phone}</div>}
-                                                    {app.email && <div>✉️ {app.email}</div>}
-                                                </td>
-                                                <td className="text-xs max-w-xs truncate" title={app.address}>{app.address || '—'}</td>
-                                                <td><Badge color="purple">{app.position || '—'}</Badge></td>
-                                                <td className="text-xs max-w-xs truncate" title={app.experience}>{app.experience || '—'}</td>
-                                                <td>{app.cvLink ? <a href={app.cvLink} target="_blank" rel="noopener noreferrer" className="text-blue-400 text-xs hover:underline">Voir CV</a> : '—'}</td>
-                                                <td className="text-xs max-w-xs truncate" title={app.internalNotes}>{app.internalNotes || '—'}</td>
-                                                <td>
-                                                    <div className="flex gap-2 justify-center">
-                                                        <button onClick={() => handleAcceptApp(app)} className="btn btn-success py-1 px-2 text-xs">Accepter</button>
-                                                        <button onClick={() => handleRejectApp(app.id)} className="btn btn-danger py-1 px-2 text-xs">Refuser</button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                        <div>
+                            <button onClick={() => setShowApps(!showApps)} className="font-bold text-white mb-3 flex items-center gap-2 w-full text-left hover:opacity-80 transition-opacity"><Inbox size={16} style={{ color: 'var(--accent)' }} />{`Candidatures (${applications.length})`}<ChevronDown size={14} style={{ color: 'var(--text-dim)', transform: showApps ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} /></button>
+                            {showApps && <div className="space-y-2">
+                                {[...applications].sort((a, b) => new Date(a.date) - new Date(b.date)).map(app => (
+                                    <div key={app.id} className="rounded-xl p-3 flex items-center gap-3 transition-all hover:border-white/10" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
+                                        {/* Avatar */}
+                                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent2))' }}>{app.name?.charAt(0)}</div>
+                                        {/* Info */}
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="font-semibold text-white text-sm">{app.name}</span>
+                                                <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-dim)' }}>{app.date ? fmtDate(app.date) : '—'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-3 mt-1 flex-wrap text-xs" style={{ color: 'var(--text-dim)' }}>
+                                                {app.ageHRP && <span className="flex items-center gap-1"><User size={10} />{app.ageHRP} ans</span>}
+                                                {app.phoneRP && <span className="flex items-center gap-1"><Phone size={10} />{app.phoneRP}</span>}
+                                                {app.discord && <span className="flex items-center gap-1"><MessageCircle size={10} />{app.discord}</span>}
+                                                {app.availability && <span className="flex items-center gap-1"><Clock size={10} />{app.availability}</span>}
+                                                {app.dob && <span className="flex items-center gap-1"><Calendar size={10} />{fmtDate(app.dob)}</span>}
+                                            </div>
+                                            {app.motivation && <p className="text-xs italic mt-1" style={{ color: 'var(--text)', lineHeight: '1.5' }}>{app.motivation}</p>}
+                                        </div>
+                                        {/* Actions */}
+                                        <div className="flex items-center gap-1 flex-shrink-0">
+                                            <button onClick={() => handleAcceptApp(app)} className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style={{ background: 'rgba(16,185,129,0.12)', color: '#34d399', border: '1px solid rgba(16,185,129,0.2)' }} title="Recruter"><CheckCircle size={14} /></button>
+                                            <button onClick={() => handleRejectApp(app.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }} title="Refuser"><X size={14} /></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>}
                         </div>
                     )}
 
@@ -3066,7 +3053,7 @@
                             <table className="data-table" style={{ minWidth: '900px' }}>
                                 <thead><tr>
                                     <th>Employé</th><th className="text-center">Heures</th><th style={{ minWidth: 200 }}>Rentabilité</th>
-                                    <th className="text-right">Salaire</th>{config?.primesEnabled !== false && <th className="text-right">Prime</th>}<th className="text-right">Total</th><th className="text-center">Fiche</th>
+                                    <th className="text-right">Salaire</th><th className="text-right">Prime</th><th className="text-right">Total</th><th className="text-center">Fiche</th>
                                 </tr></thead>
                                 <tbody>
                                     {weekStats.empStats.map(emp => {
@@ -3076,7 +3063,7 @@
                                         const progress = targetProfit > 0 ? Math.min(emp.profit / targetProfit * 100, 100) : 100;
                                         const isComplete = progress >= 100;
                                         const earnedSalary = maxSalary * (progress / 100);
-                                        const finalBonus = isComplete ? emp.bonus : 0;
+                                        const finalBonus = (config?.primesEnabled !== false && isComplete) ? emp.bonus : 0;
                                         const total = earnedSalary + finalBonus;
                                         return (
                                             <tr key={emp.id}>
@@ -3099,11 +3086,9 @@
                                                     </div>
                                                 </td>
                                                 <td className="text-right mono text-white">€ {fmtMoney(earnedSalary)}<div className="text-xs" style={{ color: 'var(--text-dim)' }}>max € {fmtMoney(maxSalary)}</div></td>
-                                                {config?.primesEnabled !== false && (
-                                                    <td className="text-right">
-                                                        {isComplete ? <span className="mono text-emerald-400 font-bold flex items-center justify-end gap-1"><Unlock size={12} />€ {fmtMoney(emp.bonus)}</span> : <span className="mono text-amber-500/60 flex items-center justify-end gap-1"><Lock size={12} />€ {fmtMoney(emp.bonus)}</span>}
-                                                    </td>
-                                                )}
+                                                <td className="text-right">
+                                                    {isComplete ? <span className="mono text-emerald-400 font-bold flex items-center justify-end gap-1"><Unlock size={12} />€ {fmtMoney(emp.bonus)}</span> : <span className="mono text-amber-500/60 flex items-center justify-end gap-1"><Lock size={12} />€ {fmtMoney(emp.bonus)}</span>}
+                                                </td>
                                                 <td className="text-right">
                                                     <span className={`inline-block px-3 py-1 rounded-lg mono font-bold text-sm ${isComplete ? 'text-emerald-100' : 'text-white'}`} style={{ background: isComplete ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.05)', border: `1px solid ${isComplete ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.08)'}` }}>
                                                         € {fmtMoney(total)}
@@ -3194,20 +3179,6 @@
                         </div>
                     </div>
 
-                    {/* GLOBAL SETTINGS */}
-                    <div className="card p-5 space-y-4">
-                        <h3 className="font-bold text-white flex items-center gap-2"><Settings size={16} className="text-blue-400" />Paramètres globaux</h3>
-                        <label className="flex items-center gap-3 cursor-pointer p-3 rounded-xl border transition-all" style={{ borderColor: 'var(--border)', background: 'rgba(0,0,0,0.2)' }}>
-                            <div className={`w-5 h-5 rounded flex items-center justify-center transition-all ${localConfig.primesEnabled !== false ? 'text-white' : 'border'}`} style={localConfig.primesEnabled !== false ? { background: 'var(--accent)' } : { borderColor: 'rgba(255,255,255,0.2)' }} onClick={() => { setLocalConfig({ ...localConfig, primesEnabled: localConfig.primesEnabled === false }); markChanged(); }}>
-                                {localConfig.primesEnabled !== false && <CheckCircle size={14} />}
-                            </div>
-                            <div>
-                                <span className="text-sm font-bold text-white block">Activer le système de primes</span>
-                                <span className="text-xs" style={{ color: 'var(--text-dim)' }}>Calcul automatique des primes et bonus sur objectifs</span>
-                            </div>
-                        </label>
-                    </div>
-
                     {/* SERVICES */}
                     <div className="card p-5 space-y-4">
                         <h3 className="font-bold text-white flex items-center gap-2"><Package size={16} className="text-emerald-400" />Types de {sector.serviceLabel.toLowerCase()}s</h3>
@@ -3228,6 +3199,19 @@
                         <button onClick={() => { setLocalConfig({ ...localConfig, services: [...(localConfig.services || []), { id: `srv_${Date.now()}`, name: `Nouveau ${sector.serviceLabel.toLowerCase()}`, costPercent: 0, bonusPercent: null }] }); markChanged(); }} className="w-full py-2.5 rounded-xl border-2 border-dashed text-sm font-semibold flex items-center justify-center gap-2 transition-colors hover:text-white" style={{ borderColor: 'rgba(255,255,255,0.1)', color: 'var(--text-dim)' }}>
                             <Plus size={15} />Ajouter une catégorie
                         </button>
+                    </div>
+
+                    {/* PRIMES TOGGLE */}
+                    <div className="card p-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="font-bold text-white flex items-center gap-2"><Award size={16} className="text-purple-400" />Système de Primes</h3>
+                                <p className="text-xs mt-1" style={{ color: 'var(--text-dim)' }}>Activer ou désactiver le calcul des primes pour les factures et salaires</p>
+                            </div>
+                            <button onClick={() => { setLocalConfig({ ...localConfig, primesEnabled: localConfig.primesEnabled === false ? true : false }); markChanged(); }} className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${localConfig.primesEnabled !== false ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/15 text-red-400 border border-red-500/30'}`}>
+                                {localConfig.primesEnabled !== false ? '✅ Activé' : '❌ Désactivé'}
+                            </button>
+                        </div>
                     </div>
 
                     {/* GRADES */}
