@@ -410,6 +410,12 @@
             border: 1px solid rgba(107, 114, 128, 0.2);
         }
 
+        .badge-orange {
+            background: rgba(249, 115, 22, 0.12);
+            color: #fb923c;
+            border: 1px solid rgba(249, 115, 22, 0.2);
+        }
+
         /* Tables */
         .data-table {
             width: 100%;
@@ -1087,13 +1093,30 @@
         const fmtMoney = n => `${parseFloat(n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
         const fmtDuration = ms => { const m = Math.floor(ms / 60000), h = Math.floor(m / 60); return `${h}h${(m % 60).toString().padStart(2, '0')}`; };
 
-        const getGradeColor = g => {
+        const GRADE_COLORS = [
+            { name: 'red', hex: '#ef4444' }, { name: 'orange', hex: '#f97316' }, { name: 'amber', hex: '#f59e0b' },
+            { name: 'green', hex: '#10b981' }, { name: 'blue', hex: '#3b82f6' }, { name: 'purple', hex: '#8b5cf6' }, { name: 'gray', hex: '#6b7280' },
+        ];
+
+        const getGradeColor = (g, gradesArr) => {
+            if (gradesArr) {
+                const found = gradesArr.find(gr => gr.name === g);
+                if (found && found.color) return found.color;
+            }
             const l = (g || '').toLowerCase();
             if (l.includes('patron') && !l.includes('co')) return 'red';
             if (l.includes('co-patron') || l.includes('directeur')) return 'amber';
             if (l.includes('avocat') || l.includes('juriste')) return 'purple';
             if (l.includes('chef') || l.includes('manager') || l.includes('responsable')) return 'blue';
             if (l.includes('senior') || l.includes('expert')) return 'green';
+            return 'gray';
+        };
+
+        const getServiceColor = (typeName, services) => {
+            if (services) {
+                const found = services.find(s => s.name === typeName);
+                if (found && found.color) return found.color;
+            }
             return 'gray';
         };
 
@@ -1113,11 +1136,11 @@
             ]
         };
         const INIT_GRADES = [
-            { id: 'g1', name: 'Directeur', primePercent: 20, maxSalary: 5000, order: 0 },
-            { id: 'g2', name: 'Manager', primePercent: 15, maxSalary: 3500, order: 1 },
-            { id: 'g3', name: 'Senior', primePercent: 10, maxSalary: 2500, order: 2 },
-            { id: 'g4', name: 'Junior', primePercent: 8, maxSalary: 1800, order: 3 },
-            { id: 'g5', name: 'Stagiaire', primePercent: 5, maxSalary: 800, order: 4 },
+            { id: 'g1', name: 'Directeur', primePercent: 20, maxSalary: 5000, order: 0, color: 'amber' },
+            { id: 'g2', name: 'Manager', primePercent: 15, maxSalary: 3500, order: 1, color: 'blue' },
+            { id: 'g3', name: 'Senior', primePercent: 10, maxSalary: 2500, order: 2, color: 'green' },
+            { id: 'g4', name: 'Junior', primePercent: 8, maxSalary: 1800, order: 3, color: 'gray' },
+            { id: 'g5', name: 'Stagiaire', primePercent: 5, maxSalary: 800, order: 4, color: 'gray' },
         ];
         const INIT_EMPLOYEES = [
             { id: 'e0', name: 'Admin', grade: 'Directeur', role: 'admin', password: 'admin', dob: '', contractUrl: '', iban: '', isServiceActive: false },
@@ -2408,7 +2431,7 @@
                                                     <select className="input-base py-1 text-sm" value={editType} onChange={e => setEditType(e.target.value)}>
                                                         {(config.services || []).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                                                     </select>
-                                                ) : <Badge color="gray">{inv.type}</Badge>}
+                                                ) : <Badge color={getServiceColor(inv.type, config.services)}>{inv.type}</Badge>}
                                             </td>
                                             <td className="text-right">
                                                 {editFullId === inv.id ? (
@@ -2498,7 +2521,7 @@
                                         {cInv.map(inv => (
                                             <tr key={inv.id}>
                                                 <td className="text-xs" style={{ color: 'var(--text-dim)' }}>{fmtDate(inv.date)}</td>
-                                                <td><Badge color="gray">{inv.type}</Badge></td>
+                                                <td><Badge color={getServiceColor(inv.type, config.services)}>{inv.type}</Badge></td>
                                                 <td className="text-sm" style={{ color: 'var(--text-dim)' }}>{inv.employeeName}</td>
                                                 <td className="text-right mono font-bold text-white">€ {fmtMoney(inv.price)}</td>
                                                 <td><button onClick={() => genInvoicePDF(inv, {})} className="btn btn-ghost py-1 px-2 text-xs"><Download size={13} /></button></td>
@@ -3007,7 +3030,7 @@
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td><Badge color={getGradeColor(emp.grade)}>{emp.grade}</Badge></td>
+                                                    <td><Badge color={getGradeColor(emp.grade, grades)}>{emp.grade}</Badge></td>
                                                     <td className="text-center">
                                                         <div className={`flex items-center justify-center gap-1.5 text-xs font-semibold ${emp.isServiceActive ? 'text-emerald-400' : 'text-gray-500'}`}>
                                                             <div className={`status-dot ${emp.isServiceActive ? 'online' : 'offline'}`} />
@@ -3185,6 +3208,11 @@
                         {(localConfig.services || []).map((svc, i) => (
                             <div key={svc.id} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)' }}>
                                 <input className="input-base flex-1 py-2 text-sm" value={svc.name} onChange={e => { const n = [...localConfig.services]; n[i].name = e.target.value; setLocalConfig({ ...localConfig, services: n }); markChanged(); }} />
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                    {GRADE_COLORS.map(c => (
+                                        <button key={c.name} onClick={() => { const n = [...localConfig.services]; n[i].color = c.name; setLocalConfig({ ...localConfig, services: n }); markChanged(); }} style={{ width: 20, height: 20, borderRadius: '50%', background: c.hex, border: (svc.color || 'gray') === c.name ? '3px solid white' : '3px solid transparent', transform: (svc.color || 'gray') === c.name ? 'scale(1.15)' : 'scale(1)', transition: 'all 0.2s', cursor: 'pointer' }} title={c.name} />
+                                    ))}
+                                </div>
                                 <div className="relative w-28">
                                     <input type="number" className="input-base py-2 text-sm pr-6 mono" value={svc.costPercent} onChange={e => { const n = [...localConfig.services]; n[i].costPercent = parseFloat(e.target.value) || 0; setLocalConfig({ ...localConfig, services: n }); markChanged(); }} placeholder="Coût%" />
                                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: 'var(--text-dim)' }}>%</span>
@@ -3219,11 +3247,18 @@
                         <div className="p-5 border-b" style={{ borderColor: 'var(--border)' }}><h3 className="font-bold text-white flex items-center gap-2"><Layers size={16} className="text-blue-400" />Grilles de salaires</h3></div>
                         <div className="overflow-x-auto">
                             <table className="data-table">
-                                <thead><tr><th>Grade</th><th className="text-center">Prime par défaut %</th><th className="text-center">Salaire max</th><th className="text-center">Suppr.</th></tr></thead>
+                                <thead><tr><th>Grade</th><th className="text-center">Couleur</th><th className="text-center">Prime par défaut %</th><th className="text-center">Salaire max</th><th className="text-center">Suppr.</th></tr></thead>
                                 <tbody>
                                     {localGrades.map(g => (
                                         <tr key={g.id}>
                                             <td><input className="input-base py-1.5 text-sm" value={g.name} onChange={e => { setLocalGrades(localGrades.map(x => x.id === g.id ? { ...x, name: e.target.value } : x)); markChanged(); }} /></td>
+                                            <td>
+                                                <div className="flex items-center justify-center gap-1 flex-wrap">
+                                                    {GRADE_COLORS.map(c => (
+                                                        <button key={c.name} onClick={() => { setLocalGrades(localGrades.map(x => x.id === g.id ? { ...x, color: c.name } : x)); markChanged(); }} style={{ width: 22, height: 22, borderRadius: '50%', background: c.hex, border: (g.color || getGradeColor(g.name)) === c.name ? '3px solid white' : '3px solid transparent', transform: (g.color || getGradeColor(g.name)) === c.name ? 'scale(1.15)' : 'scale(1)', transition: 'all 0.2s', cursor: 'pointer' }} title={c.name} />
+                                                    ))}
+                                                </div>
+                                            </td>
                                             <td className="text-center"><input type="number" className="input-base py-1.5 text-sm w-16 text-center mono" value={g.primePercent} onChange={e => { setLocalGrades(localGrades.map(x => x.id === g.id ? { ...x, primePercent: parseFloat(e.target.value) || 0 } : x)); markChanged(); }} /></td>
                                             <td className="text-center"><input type="number" className="input-base py-1.5 text-sm w-24 text-center mono" value={g.maxSalary} onChange={e => { setLocalGrades(localGrades.map(x => x.id === g.id ? { ...x, maxSalary: parseFloat(e.target.value) || 0 } : x)); markChanged(); }} /></td>
                                             <td className="text-center"><button onClick={() => { if (window.confirm('Supprimer?')) { setLocalGrades(localGrades.filter(x => x.id !== g.id)); markChanged(); } }} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={14} /></button></td>
