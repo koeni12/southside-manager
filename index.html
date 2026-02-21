@@ -1,4 +1,3 @@
-zD
 <!DOCTYPE html>
 <!-- 
   ✅ FIREBASE CLOUD VERSION (Connectée à la DB d'origine)
@@ -2940,80 +2939,69 @@ zD
                     {isBoss && applications.length > 0 && (
                         <div className="space-y-4 mt-6">
                             <h3 className="section-title flex items-center gap-2 text-lg"><Inbox size={18} style={{ color: 'var(--accent)' }} />Candidatures en attente ({applications.length})</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {[...applications].sort((a, b) => new Date(a.date) - new Date(b.date)).map(app => (
-                                    <div key={app.id} className="card p-5 space-y-4">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <h4 className="font-bold text-white text-lg">{app.firstName} {app.lastName?.toUpperCase()}</h4>
-                                                <div className="text-xs mt-1" style={{ color: 'var(--text-dim)' }}>{fmtDate(app.date)}</div>
-                                            </div>
-                                            <Badge color="purple">{app.position || 'Candidature'}</Badge>
-                                        </div>
-
-                                        <div className="space-y-2 text-sm">
-                                            {(app.dob || app.ageHRP) && (
-                                                <div className="flex items-start gap-2">
-                                                    <span className="w-5 text-center">🎂</span>
-                                                    <span style={{ color: 'var(--text-dim)' }}>{app.ageHRP ? `${app.ageHRP} ans` : ''} {app.dob ? `(${app.dob})` : ''}</span>
-                                                </div>
-                                            )}
-                                            {(app.phone || app.email || app.discord) && (
-                                                <div className="flex items-start gap-2">
-                                                    <span className="w-5 text-center">📱</span>
-                                                    <span style={{ color: 'var(--text-dim)' }}>
-                                                        {app.phone && <span>{app.phone}<br /></span>}
-                                                        {app.email && <span>{app.email}<br /></span>}
-                                                        {app.discord && <span>Discord: {app.discord}</span>}
-                                                    </span>
-                                                </div>
-                                            )}
-                                            {app.address && (
-                                                <div className="flex items-start gap-2">
-                                                    <span className="w-5 text-center">📍</span>
-                                                    <span style={{ color: 'var(--text-dim)' }}>{app.address}</span>
-                                                </div>
-                                            )}
-                                            {app.availability && (
-                                                <div className="flex items-start gap-2">
-                                                    <span className="w-5 text-center">🕒</span>
-                                                    <span style={{ color: 'var(--text-dim)' }}>{app.availability}</span>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="h-px w-full" style={{ background: 'var(--border)' }}></div>
-
-                                        <div className="space-y-3">
-                                            {app.experience && (
-                                                <div>
-                                                    <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--text-dim)' }}>Expérience</p>
-                                                    <p className="text-sm text-white" style={{ background: 'rgba(255,255,255,0.03)', padding: '8px', borderRadius: '6px' }}>{app.experience}</p>
-                                                </div>
-                                            )}
-                                            {app.motivation && (
-                                                <div>
-                                                    <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--text-dim)' }}>Motivations</p>
-                                                    <p className="text-sm text-white" style={{ background: 'rgba(255,255,255,0.03)', padding: '8px', borderRadius: '6px' }}>{app.motivation}</p>
-                                                </div>
-                                            )}
-                                            {app.cvLink && (
-                                                <a href={app.cvLink} target="_blank" rel="noopener noreferrer" className="btn btn-ghost w-full justify-center py-2 text-sm"><ExternalLink size={14} /> Voir le CV</a>
-                                            )}
-                                            {app.internalNotes && (
-                                                <div>
-                                                    <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--text-dim)' }}>Notes internes</p>
-                                                    <p className="text-sm italic" style={{ color: 'var(--text-dim)' }}>{app.internalNotes}</p>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <div className="flex gap-2 pt-2">
-                                            <button onClick={() => handleAcceptApp(app)} className="btn btn-success flex-1 justify-center py-2"><Check size={16} />Accepter</button>
-                                            <button onClick={() => handleRejectApp(app.id)} className="btn btn-danger flex-1 justify-center py-2"><X size={16} />Refuser</button>
-                                        </div>
-                                    </div>
-                                ))}
+                            <div className="overflow-x-auto pb-4">
+                                <table className="data-table" style={{ minWidth: '1000px' }}>
+                                    <thead className="bg-[#1a1a2e] text-gray-400 text-xs text-left">
+                                        <tr>
+                                            <th className="px-4 py-3 font-semibold w-[250px]">Candidat</th>
+                                            <th className="px-4 py-3 font-semibold w-[150px]">Poste</th>
+                                            <th className="px-4 py-3 font-semibold w-[200px]">Contact</th>
+                                            <th className="px-4 py-3 font-semibold w-[300px]">Informations</th>
+                                            <th className="px-4 py-3 font-semibold w-[150px] text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-[rgba(255,255,255,0.05)] text-sm">
+                                        {[...applications].sort((a, b) => new Date(b.date) - new Date(a.date)).map(app => (
+                                            <tr key={app.id} className="hover:bg-white/5 transition-colors group">
+                                                <td className="px-4 py-3 align-top">
+                                                    <div>
+                                                        <div className="font-bold text-white mb-0.5">{app.firstName} {app.lastName?.toUpperCase()}</div>
+                                                        <div className="text-xs text-gray-400 flex items-center gap-1"><Clock size={12} /> {fmtDate(app.date)}</div>
+                                                        {(app.dob || app.ageHRP) && (
+                                                            <div className="text-xs text-gray-400 mt-1 flex items-center gap-1"><User size={12} /> {app.ageHRP ? `${app.ageHRP} ans` : ''} {app.dob ? `(${app.dob})` : ''}</div>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 align-top">
+                                                    <Badge color="purple" className="mb-2 whitespace-nowrap">{app.position || 'Candidature'}</Badge>
+                                                    {app.availability && <div className="text-xs text-gray-400 mt-1 flex items-start gap-1"><Calendar size={12} className="mt-0.5 shrink-0" /> <span className="line-clamp-2" title={app.availability}>{app.availability}</span></div>}
+                                                </td>
+                                                <td className="px-4 py-3 align-top">
+                                                    <div className="space-y-1 text-gray-300">
+                                                        {app.phone && <div className="flex items-center gap-2"><Phone size={14} className="text-gray-500 shrink-0" /> <span className="truncate" title={app.phone}>{app.phone}</span></div>}
+                                                        {app.discord && <div className="flex items-center gap-2"><MessageCircle size={14} className="text-indigo-400 shrink-0" /> <span className="truncate" title={app.discord}>{app.discord}</span></div>}
+                                                        {app.email && <div className="flex items-center gap-2"><Mail size={14} className="text-gray-500 shrink-0" /> <span className="truncate" title={app.email}>{app.email}</span></div>}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 align-top">
+                                                    <div className="space-y-2">
+                                                        {app.experience && (
+                                                            <div>
+                                                                <span className="text-[10px] font-bold uppercase text-gray-500 block mb-0.5">Exp.</span>
+                                                                <span className="text-gray-300 line-clamp-2 text-xs" title={app.experience}>{app.experience}</span>
+                                                            </div>
+                                                        )}
+                                                        {app.motivation && (
+                                                            <div>
+                                                                <span className="text-[10px] font-bold uppercase text-gray-500 block mb-0.5">Motiv.</span>
+                                                                <span className="text-gray-300 line-clamp-2 text-xs" title={app.motivation}>{app.motivation}</span>
+                                                            </div>
+                                                        )}
+                                                        {app.cvLink && (
+                                                            <a href={app.cvLink} target="_blank" rel="noopener noreferrer" className="text-indigo-400 hover:text-indigo-300 text-xs inline-flex items-center gap-1 mt-1 transition-colors"><ExternalLink size={12} /> Voir CV</a>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 align-top text-right">
+                                                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button onClick={() => handleAcceptApp(app)} className="btn btn-success py-1.5 px-3 text-xs flex items-center gap-1"><Check size={14} /> Oui</button>
+                                                        <button onClick={() => handleRejectApp(app.id)} className="btn btn-danger py-1.5 px-3 text-xs flex items-center gap-1"><X size={14} /> Non</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     )}
