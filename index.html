@@ -1334,7 +1334,7 @@
             const [newInvoice, setNewInvoice] = useState({ client: '', type: '', price: '' });
             const [newEmployee, setNewEmployee] = useState({ name: '', grade: '', dob: '', contractUrl: '', iban: '', role: 'user', password: '1234' });
             const [newContract, setNewContract] = useState({ company: '', date: '', endDate: '', value: '', description: '', url: '', supplementaryDocs: [] });
-            const [appForm, setAppForm] = useState({ firstName: '', lastName: '', phone: '', email: '', address: '', position: '', experience: '', cvLink: '' });
+            const [appForm, setAppForm] = useState({ firstName: '', lastName: '', dob: '', ageHRP: '', phone: '', email: '', discord: '', address: '', position: '', availability: '', experience: '', motivation: '', cvLink: '' });
             const [editingEmployee, setEditingEmployee] = useState(null);
             const [editingContract, setEditingContract] = useState(null);
             const [newTask, setNewTask] = useState({ title: '', desc: '', assignee: '', priority: 'medium', status: 'todo' });
@@ -1747,7 +1747,7 @@
                 const a = { ...appForm, internalNotes: '', id: `app${Date.now()}`, date: new Date().toISOString() };
                 setApplications(p => [...p, a]);
                 FS.upsert('applications', a);
-                setAppForm({ firstName: '', lastName: '', phone: '', email: '', address: '', position: '', experience: '', cvLink: '' });
+                setAppForm({ firstName: '', lastName: '', dob: '', ageHRP: '', phone: '', email: '', discord: '', address: '', position: '', availability: '', experience: '', motivation: '', cvLink: '' });
                 setAuthMode('login');
                 showToast('Candidature envoyée !');
             }, [appForm, showToast]);
@@ -2048,15 +2048,22 @@
                                             <Input label="Nom *" value={appForm.lastName} onChange={e => setAppForm({ ...appForm, lastName: e.target.value })} placeholder="Nom" />
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
-                                            <Input label="Téléphone" value={appForm.phone} onChange={e => setAppForm({ ...appForm, phone: e.target.value })} placeholder="06..." />
-                                            <Input label="Email" type="email" value={appForm.email} onChange={e => setAppForm({ ...appForm, email: e.target.value })} placeholder="email@ext.com" />
+                                            <Input label="Date NAISS." type="date" value={appForm.dob} onChange={e => setAppForm({ ...appForm, dob: e.target.value })} />
+                                            <Input label="Âge HRP" value={appForm.ageHRP} onChange={e => setAppForm({ ...appForm, ageHRP: e.target.value })} placeholder="18" />
                                         </div>
-                                        <Input label="Adresse" value={appForm.address} onChange={e => setAppForm({ ...appForm, address: e.target.value })} placeholder="Adresse complète" />
                                         <div className="grid grid-cols-2 gap-3">
-                                            <Input label="Poste demandé *" value={appForm.position} onChange={e => setAppForm({ ...appForm, position: e.target.value })} placeholder="Ex: Mécanicien" />
+                                            <Input label="Téléphone RP" value={appForm.phone} onChange={e => setAppForm({ ...appForm, phone: e.target.value })} placeholder="06..." />
+                                            <Input label="Discord" value={appForm.discord} onChange={e => setAppForm({ ...appForm, discord: e.target.value })} placeholder="Discord" />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <Input label="Email" type="email" value={appForm.email} onChange={e => setAppForm({ ...appForm, email: e.target.value })} placeholder="email@ext.com" />
                                             <Input label="Lien CV" value={appForm.cvLink} onChange={e => setAppForm({ ...appForm, cvLink: e.target.value })} placeholder="https://..." />
                                         </div>
-                                        <Input label="Expérience" value={appForm.experience} onChange={e => setAppForm({ ...appForm, experience: e.target.value })} placeholder="Vos expériences..." rows={2} />
+                                        <Input label="Adresse" value={appForm.address} onChange={e => setAppForm({ ...appForm, address: e.target.value })} placeholder="Adresse complète" />
+                                        <Input label="Poste demandé *" value={appForm.position} onChange={e => setAppForm({ ...appForm, position: e.target.value })} placeholder="Ex: Mécanicien" />
+                                        <Input label="Disponibilités" value={appForm.availability} onChange={e => setAppForm({ ...appForm, availability: e.target.value })} placeholder="Disponibilités..." rows={2} />
+                                        <Input label="Expériences" value={appForm.experience} onChange={e => setAppForm({ ...appForm, experience: e.target.value })} placeholder="Vos expériences..." rows={2} />
+                                        <Input label="Motivations" value={appForm.motivation} onChange={e => setAppForm({ ...appForm, motivation: e.target.value })} placeholder="Vos motivations..." rows={3} />
                                         <button onClick={handleSubmitApp} className="btn btn-primary w-full justify-center py-3"><Send size={16} />Envoyer</button>
                                     </div>
                                 </>
@@ -2940,10 +2947,13 @@
                                         <tr>
                                             <th>Date</th>
                                             <th>Candidat</th>
+                                            <th>Âge</th>
                                             <th>Contact</th>
                                             <th>Adresse</th>
                                             <th>Poste demandé</th>
+                                            <th>Disponibilités</th>
                                             <th>Expérience</th>
+                                            <th>Motivations</th>
                                             <th>CV</th>
                                             <th>Notes</th>
                                             <th className="text-center">Actions</th>
@@ -2955,12 +2965,19 @@
                                                 <td className="text-xs" style={{ color: 'var(--text-dim)' }}>{fmtDate(app.date)}</td>
                                                 <td className="font-bold text-white">{app.lastName?.toUpperCase()} {app.firstName}</td>
                                                 <td className="text-xs" style={{ color: 'var(--text-dim)' }}>
+                                                    {app.dob ? <span>Né(e): {app.dob}<br /></span> : null}
+                                                    {app.ageHRP ? <span>HRP: {app.ageHRP} ans</span> : '—'}
+                                                </td>
+                                                <td className="text-xs" style={{ color: 'var(--text-dim)' }}>
                                                     {app.phone && <div>📞 {app.phone}</div>}
                                                     {app.email && <div>✉️ {app.email}</div>}
+                                                    {app.discord && <div>🎮 {app.discord}</div>}
                                                 </td>
                                                 <td className="text-xs max-w-xs truncate" title={app.address}>{app.address || '—'}</td>
                                                 <td><Badge color="purple">{app.position || '—'}</Badge></td>
+                                                <td className="text-xs max-w-xs truncate" title={app.availability}>{app.availability || '—'}</td>
                                                 <td className="text-xs max-w-xs truncate" title={app.experience}>{app.experience || '—'}</td>
+                                                <td className="text-xs max-w-xs truncate" title={app.motivation}>{app.motivation || '—'}</td>
                                                 <td>{app.cvLink ? <a href={app.cvLink} target="_blank" rel="noopener noreferrer" className="text-blue-400 text-xs hover:underline">Voir CV</a> : '—'}</td>
                                                 <td className="text-xs max-w-xs truncate" title={app.internalNotes}>{app.internalNotes || '—'}</td>
                                                 <td>
