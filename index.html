@@ -1777,6 +1777,15 @@
                 showToast('Candidature refusée.', 'warning');
             }, [applications, showToast]);
 
+            const handleToggleContacted = useCallback(async (id) => {
+                const app = applications.find(a => a.id === id);
+                if (!app) return;
+                const updated = { ...app, contacted: !app.contacted };
+                setApplications(p => p.map(a => a.id === id ? updated : a));
+                FS.upsert('applications', updated);
+                showToast(app.contacted ? 'Marqué comme non contacté.' : 'Marqué comme contacté ✅');
+            }, [applications, showToast]);
+
             const handleSubmitApp = useCallback(async () => {
                 if (!appForm.name) { showToast('Nom requis.', 'error'); return; }
                 const a = { ...appForm, id: `app${Date.now()}`, date: new Date().toISOString() };
@@ -1993,7 +2002,7 @@
                                 {activeTab === 'contracts' && <ContractsTab {...{ contracts, newContract, setNewContract, handleSaveContract, handleDeleteContract, editingContract, setEditingContract, isBoss, theme }} />}
                                 {activeTab === 'tarifs' && <TarifsTab {...{ config, handleSaveConfig, isBoss, theme }} />}
                                 {activeTab === 'aide' && <AideTab {...{ customMessages, setCustomMessages, isEditingMessages, setIsEditingMessages, handleSaveMessages, isBoss, theme }} />}
-                                {activeTab === 'hr' && <HRTab {...{ employees: sortedEmployees, applications, newEmployee, setNewEmployee, handleAddEmployee, handleAcceptApp, handleRejectApp, editingEmployee, setEditingEmployee, setModal, isBoss, grades, theme, handleViewEmpStats: emp => { setDashTarget(emp); setActiveTab('personal'); }, sector, serviceLogs, weekStats }} />}
+                                {activeTab === 'hr' && <HRTab {...{ employees: sortedEmployees, applications, newEmployee, setNewEmployee, handleAddEmployee, handleAcceptApp, handleRejectApp, handleToggleContacted, editingEmployee, setEditingEmployee, setModal, isBoss, grades, theme, handleViewEmpStats: emp => { setDashTarget(emp); setActiveTab('personal'); }, sector, serviceLogs, weekStats }} />}
                                 {activeTab === 'salaires' && <SalairesTab {...{ weekStats, grades, selectedDate, setSelectedDate, generatePaySlipPDF: genPaySlipPDF, theme, genExcelCSV, invoices, serviceLogs, config }} />}
                                 {activeTab === 'settings' && <SettingsTab {...{ theme, handleSaveTheme, config, handleSaveConfig, grades, handleSaveGrades, confirmResetId, setConfirmResetId, handleResetStats, customMessages, setCustomMessages, handleSaveMessages, isEditingMessages, setIsEditingMessages, sector, showToast }} />}
                             </div>
@@ -2941,14 +2950,16 @@
         // =============================================
         // HR TAB
         // =============================================
-        function HRTab({ employees, applications, newEmployee, setNewEmployee, handleAddEmployee, handleAcceptApp, handleRejectApp, editingEmployee, setEditingEmployee, setModal, isBoss, grades, theme, handleViewEmpStats, sector, serviceLogs, weekStats }) {
+        function HRTab({ employees, applications, newEmployee, setNewEmployee, handleAddEmployee, handleAcceptApp, handleRejectApp, handleToggleContacted, editingEmployee, setEditingEmployee, setModal, isBoss, grades, theme, handleViewEmpStats, sector, serviceLogs, weekStats }) {
             const missingContracts = employees.filter(e => !e.contractUrl).length;
             const [showApps, setShowApps] = useState(false);
+            const contactedCount = applications.filter(a => a.contacted).length;
+            const notContactedCount = applications.length - contactedCount;
 
             return (
                 <div className="space-y-6 max-w-6xl">
                     <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-                        <div><h2 className="section-title">Ressources Humaines</h2><p className="section-sub">{employees.length} employés · {applications.length} candidature(s)</p></div>
+                        <div><h2 className="section-title">Ressources Humaines</h2><p className="section-sub">{employees.length} employés · {applications.length} candidature(s){contactedCount > 0 && <span style={{ color: '#34d399' }}> · {contactedCount} contacté(s)</span>}{notContactedCount > 0 && <span style={{ color: '#fbbf24' }}> · {notContactedCount} en attente</span>}</p></div>
                         {missingContracts > 0 && <div className="badge badge-red"><AlertCircle size={11} />{missingContracts} contrat(s) manquant(s)</div>}
                     </div>
 
@@ -2957,15 +2968,24 @@
                         <div>
                             <button onClick={() => setShowApps(!showApps)} className="font-bold text-white mb-3 flex items-center gap-2 w-full text-left hover:opacity-80 transition-opacity"><Inbox size={16} style={{ color: 'var(--accent)' }} />{`Candidatures (${applications.length})`}<ChevronDown size={14} style={{ color: 'var(--text-dim)', transform: showApps ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s' }} /></button>
                             {showApps && <div className="space-y-2">
-                                {[...applications].sort((a, b) => new Date(a.date) - new Date(b.date)).map(app => (
-                                    <div key={app.id} className="rounded-xl p-3 flex items-center gap-3 transition-all hover:border-white/10" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
+                                {[...applications].sort((a, b) => {
+                                    // Non-contactés en premier, puis par date
+                                    if (a.contacted && !b.contacted) return 1;
+                                    if (!a.contacted && b.contacted) return -1;
+                                    return new Date(a.date) - new Date(b.date);
+                                }).map(app => (
+                                    <div key={app.id} className="rounded-xl p-3 flex items-center gap-3 transition-all hover:border-white/10" style={{ background: app.contacted ? 'rgba(16,185,129,0.04)' : 'rgba(255,255,255,0.03)', border: app.contacted ? '1px solid rgba(16,185,129,0.15)' : '1px solid var(--border)' }}>
                                         {/* Avatar */}
-                                        <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent2))' }}>{app.name?.charAt(0)}</div>
+                                        <div className="relative flex-shrink-0">
+                                            <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: 'linear-gradient(135deg,var(--accent),var(--accent2))' }}>{app.name?.charAt(0)}</div>
+                                            {app.contacted && <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center border-2" style={{ borderColor: 'var(--surface2)' }}><Phone size={8} className="text-white" /></div>}
+                                        </div>
                                         {/* Info */}
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <span className="font-semibold text-white text-sm">{app.name}</span>
                                                 <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--text-dim)' }}>{app.date ? fmtDate(app.date) : '—'}</span>
+                                                {app.contacted && <span className="text-xs px-2 py-0.5 rounded-full font-bold uppercase tracking-wider" style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', border: '1px solid rgba(16,185,129,0.25)', fontSize: '10px' }}>✓ Contacté</span>}
                                             </div>
                                             <div className="flex items-center gap-3 mt-1 flex-wrap text-xs" style={{ color: 'var(--text-dim)' }}>
                                                 {app.ageHRP && <span className="flex items-center gap-1"><User size={10} />{app.ageHRP} ans</span>}
@@ -2978,6 +2998,7 @@
                                         </div>
                                         {/* Actions */}
                                         <div className="flex items-center gap-1 flex-shrink-0">
+                                            <button onClick={() => handleToggleContacted(app.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style={app.contacted ? { background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.25)' } : { background: 'rgba(255,255,255,0.06)', color: 'var(--text-dim)', border: '1px solid rgba(255,255,255,0.1)' }} title={app.contacted ? 'Marquer non contacté' : 'Marquer comme contacté'}><Phone size={14} /></button>
                                             <button onClick={() => handleAcceptApp(app)} className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style={{ background: 'rgba(16,185,129,0.12)', color: '#34d399', border: '1px solid rgba(16,185,129,0.2)' }} title="Recruter"><CheckCircle size={14} /></button>
                                             <button onClick={() => handleRejectApp(app.id)} className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all" style={{ background: 'rgba(239,68,68,0.12)', color: '#f87171', border: '1px solid rgba(239,68,68,0.2)' }} title="Refuser"><X size={14} /></button>
                                         </div>
