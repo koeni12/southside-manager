@@ -1996,7 +1996,7 @@
                                 {activeTab === 'personal' && <PersonalTab {...{ target: dashTarget || currentUser, currentUser, weekStats, selectedDate, setSelectedDate, getPersonalStats, isServiceActive, serviceTimer, serviceStartTime, isBoss, theme, grades, serviceLogs, sector }} />}
                                 {activeTab === 'facture' && <InvoiceTab {...{ newInvoice, setNewInvoice, handleCreateInvoice, config, calcMetrics, uniqueClients, theme, sector }} />}
                                 {activeTab === 'historique' && <HistoryTab {...{ invoices, weekStats, selectedDate, setSelectedDate, histSearch, setHistSearch, histFilter, setHistFilter, handleDeleteInvoice, handleFullEditInvoice, isBoss, currentUser, config, editingInvoiceId, setEditingInvoiceId, editClientName, setEditClientName, handleUpdateInvoiceClient, theme, sector, genInvoicePDF, genExcelCSV }} />}
-                                {activeTab === 'clients' && <ClientsTab {...{ clientStats, invoices, clientSearch, setClientSearch, selectedClient, setSelectedClient, handleRenameClient, isBoss, theme, genInvoicePDF }} />}
+                                {activeTab === 'clients' && <ClientsTab {...{ clientStats, invoices, clientSearch, setClientSearch, selectedClient, setSelectedClient, handleRenameClient, isBoss, theme, genInvoicePDF, config }} />}
                                 {activeTab === 'tasks' && <TasksTab {...{ tasks, newTask, setNewTask, handleAddTask, handleUpdateTask, handleDeleteTask, employees, currentUser, taskFilter, setTaskFilter, isBoss, theme }} />}
                                 {activeTab === 'planning' && <PlanningTab {...{ employees: sortedEmployees, serviceLogs, planDate, setPlanDate, theme }} />}
                                 {activeTab === 'contracts' && <ContractsTab {...{ contracts, newContract, setNewContract, handleSaveContract, handleDeleteContract, editingContract, setEditingContract, isBoss, theme }} />}
@@ -2479,7 +2479,7 @@
         // =============================================
         // CLIENTS TAB
         // =============================================
-        function ClientsTab({ clientStats, invoices, clientSearch, setClientSearch, selectedClient, setSelectedClient, handleRenameClient, isBoss, theme, genInvoicePDF }) {
+        function ClientsTab({ clientStats, invoices, clientSearch, setClientSearch, selectedClient, setSelectedClient, handleRenameClient, isBoss, theme, genInvoicePDF, config }) {
             const [renaming, setRenaming] = useState(false);
             const [renameVal, setRenameVal] = useState('');
 
